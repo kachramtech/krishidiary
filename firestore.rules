@@ -1,0 +1,265 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net: Default deny everything
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- REUSABLE SECURITY PRIMITIVES ---
+    
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Role Lookup Functions (Zero-Trust, looks up role inside trusted path)
+    function isAdmin() {
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
+    }
+
+    function isOperator() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'operator' || 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin'
+        )
+      );
+    }
+
+    // --- COLLECTION RULES MATCHES ---
+
+    // A. Users and Operators Profiles
+    match /users/{userId} {
+      allow read: if isSignedIn() && (userId == request.auth.uid || isAdmin());
+      
+      // Allow creation of profiles. Non-admins cannot bootstrap themselves as super_admin unless email is the Super Admin's
+      allow create: if isSignedIn() && 
+                    userId == request.auth.uid && 
+                    isValidUser(incoming()) && 
+                    (incoming().role == 'operator' || request.auth.token.email == 'kachramtech@gmail.com');
+                    
+      // Updates require same schema, and keep the user role unchanged unless changed by an Admin
+      allow update: if isSignedIn() && 
+                    userId == request.auth.uid && 
+                    isValidUser(incoming()) && 
+                    (incoming().role == existing().role || isAdmin());
+                    
+      allow delete: if isAdmin();
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'name', 'email', 'role', 'createdAt', 'updatedAt']) &&
+             data.keys().size() == 6 &&
+             data.id is string && data.id == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.email is string && data.email.size() > 0 && data.email.size() <= 100 &&
+             data.role is string && (data.role == 'operator' || data.role == 'super_admin') &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    // B. Farmers Collection
+    match /farmers/{farmerId} {
+      allow read: if isOperator();
+      
+      allow create: if isOperator() && 
+                    isValidId(farmerId) && 
+                    isValidFarmer(incoming()) &&
+                    incoming().createdAt == request.time &&
+                    incoming().updatedAt == request.time;
+                    
+      allow update: if isOperator() && 
+                    isValidId(farmerId) && 
+                    isValidFarmer(incoming()) &&
+                    incoming().createdAt == existing().createdAt &&
+                    incoming().createdByOperatorId == existing().createdByOperatorId &&
+                    incoming().updatedAt == request.time &&
+                    incoming().lastUpdatedByOperatorId == request.auth.uid;
+                    
+      allow delete: if isAdmin();
+    }
+
+    function isValidFarmer(data) {
+      return data.keys().hasAll(['id', 'name', 'village', 'phone', 'totalAcreage', 'activeCrop', 'createdAt', 'updatedAt', 'createdByOperatorId', 'lastUpdatedByOperatorId']) &&
+             data.keys().size() == 10 &&
+             data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             data.village is string && data.village.size() > 0 && data.village.size() <= 200 &&
+             data.phone is string && data.phone.size() <= 20 &&
+             data.totalAcreage is number && data.totalAcreage >= 0 &&
+             data.activeCrop is string && data.activeCrop.size() <= 100 &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp &&
+             data.createdByOperatorId is string && (data.createdByOperatorId == request.auth.uid || isAdmin()) &&
+             data.lastUpdatedByOperatorId is string && data.lastUpdatedByOperatorId == request.auth.uid;
+    }
+
+    // C. Transactions Collection (Payments, Sales, Mandi Cuts with reminders)
+    match /transactions/{transactionId} {
+      // Invariant: Allow secure list evaluations to prevent unauthorized query scraping
+      allow read: if isOperator();
+      
+      allow create: if isOperator() && 
+                    isValidId(transactionId) && 
+                    isValidTransaction(incoming()) && 
+                    isValidMandiPayload(incoming()) && 
+                    isValidCreditPayload(incoming()) &&
+                    exists(/databases/$(database)/documents/farmers/$(incoming().farmerId)) && // Mandate foreign key constraint
+                    incoming().createdAt == request.time &&
+                    incoming().updatedAt == request.time;
+                    
+      allow update: if isOperator() && 
+                    isValidId(transactionId) && 
+                    isValidTransaction(incoming()) && 
+                    isValidMandiPayload(incoming()) && 
+                    isValidCreditPayload(incoming()) &&
+                    incoming().id == existing().id &&
+                    incoming().farmerId == existing().farmerId &&
+                    incoming().createdAt == existing().createdAt &&
+                    incoming().createdByOperatorId == existing().createdByOperatorId &&
+                    incoming().updatedAt == request.time &&
+                    incoming().lastUpdatedByOperatorId == request.auth.uid;
+                    
+      allow delete: if isAdmin();
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['id', 'farmerId', 'crop', 'type', 'category', 'amount', 'date', 'financialYear', 'isMandiSale', 'isCreditSale', 'paymentStatus', 'createdAt', 'updatedAt', 'createdByOperatorId', 'lastUpdatedByOperatorId']) &&
+             data.id is string &&
+             data.farmerId is string &&
+             data.crop is string && data.crop.size() > 0 && data.crop.size() <= 100 &&
+             data.type is string && (data.type == 'income' || data.type == 'expense') &&
+             data.category is string && data.category.size() > 0 && data.category.size() <= 100 &&
+             data.amount is number && data.amount >= 0 &&
+             data.date is string && // calendar formatted date (YYYY-MM-DD or similar)
+             data.financialYear is string &&
+             data.isMandiSale is bool &&
+             data.isCreditSale is bool &&
+             data.paymentStatus is string && (data.paymentStatus == 'paid' || data.paymentStatus == 'partially_paid' || data.paymentStatus == 'unpaid') &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp &&
+             data.createdByOperatorId is string && (data.createdByOperatorId == request.auth.uid || isAdmin()) &&
+             data.lastUpdatedByOperatorId is string && data.lastUpdatedByOperatorId == request.auth.uid &&
+             (!data.keys().hasAll(['voiceNoteUrl']) || data.voiceNoteUrl is string);
+    }
+
+    function isValidMandiPayload(data) {
+      return !data.isMandiSale || (
+        data.keys().hasAll(['grossWeight', 'deductionRate', 'deductions', 'netWeight', 'ratePerQuintal', 'traderName']) &&
+        data.grossWeight is number && data.grossWeight >= 0 &&
+        data.deductionRate is number && data.deductionRate >= 0 &&
+        data.deductions is number && data.deductions >= 0 &&
+        data.netWeight is number && data.netWeight >= 0 &&
+        data.ratePerQuintal is number && data.ratePerQuintal >= 0 &&
+        data.traderName is string && data.traderName.size() <= 200
+      );
+    }
+
+    function isValidCreditPayload(data) {
+      return !data.isCreditSale || (
+        data.keys().hasAll(['pendingAmount', 'dueDate']) &&
+        data.pendingAmount is number && data.pendingAmount >= 0 &&
+        data.dueDate is string
+      );
+    }
+
+    // D. Labor and Bulk Staffing Collection
+    match /labor/{laborId} {
+      allow read: if isOperator();
+      
+      allow create: if isOperator() && 
+                    isValidId(laborId) && 
+                    isValidLabor(incoming()) &&
+                    isValidIndividualLabor(incoming()) &&
+                    isValidBulkLabor(incoming()) &&
+                    exists(/databases/$(database)/documents/farmers/$(incoming().farmerId)) &&
+                    incoming().createdAt == request.time &&
+                    incoming().updatedAt == request.time;
+                    
+      allow update: if isOperator() && 
+                    isValidId(laborId) && 
+                    isValidLabor(incoming()) &&
+                    isValidIndividualLabor(incoming()) &&
+                    isValidBulkLabor(incoming()) &&
+                    incoming().id == existing().id &&
+                    incoming().farmerId == existing().farmerId &&
+                    incoming().createdAt == existing().createdAt &&
+                    incoming().createdByOperatorId == existing().createdByOperatorId &&
+                    incoming().updatedAt == request.time &&
+                    incoming().lastUpdatedByOperatorId == request.auth.uid;
+                    
+      allow delete: if isAdmin();
+    }
+
+    function isValidLabor(data) {
+      return data.keys().hasAll(['id', 'farmerId', 'date', 'crop', 'mode', 'contractAmount', 'advancePaid', 'dueBalance', 'createdAt', 'updatedAt', 'createdByOperatorId', 'lastUpdatedByOperatorId']) &&
+             data.id is string &&
+             data.farmerId is string &&
+             data.date is string &&
+             data.crop is string && data.crop.size() <= 100 &&
+             data.mode is string && (data.mode == 'individual' || data.mode == 'bulk_gang') &&
+             data.contractAmount is number && data.contractAmount >= 0 &&
+             data.advancePaid is number && data.advancePaid >= 0 &&
+             data.dueBalance is number && data.dueBalance == (data.contractAmount - data.advancePaid) &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp &&
+             data.createdByOperatorId is string && (data.createdByOperatorId == request.auth.uid || isAdmin()) &&
+             data.lastUpdatedByOperatorId is string && data.lastUpdatedByOperatorId == request.auth.uid;
+    }
+
+    function isValidIndividualLabor(data) {
+      return data.mode != 'individual' || (
+        data.keys().hasAll(['laborerName', 'attendance']) &&
+        data.laborerName is string && data.laborerName.size() > 0 && data.laborerName.size() <= 200 &&
+        data.attendance is string && (data.attendance == 'present' || data.attendance == 'half_day' || data.attendance == 'absent')
+      );
+    }
+
+    function isValidBulkLabor(data) {
+      return data.mode != 'bulk_gang' || (
+        data.keys().hasAll(['workersCount', 'groupName', 'workDescription']) &&
+        data.workersCount is number && data.workersCount >= 1 &&
+        data.groupName is string && data.groupName.size() > 0 && data.groupName.size() <= 200 &&
+        data.workDescription is string && data.workDescription.size() <= 500
+      );
+    }
+
+    // E. System Audits Collection (Immutable Audit Logs Trail)
+    match /audits/{auditId} {
+      allow read: if isOperator();
+      allow create: if isOperator() && 
+                    isValidId(auditId) && 
+                    isValidAudit(incoming());
+      allow update, delete: if false; // Log entries must be fully tamper-proof and immutable
+    }
+
+    function isValidAudit(data) {
+      return data.keys().hasAll(['id', 'operatorId', 'operatorName', 'action', 'targetId', 'targetCollection', 'timestamp', 'details']) &&
+             data.keys().size() == 8 &&
+             data.id is string &&
+             data.operatorId is string && data.operatorId == request.auth.uid &&
+             data.operatorName is string && data.operatorName.size() > 0 && data.operatorName.size() <= 100 &&
+             data.action is string && data.action.size() > 0 && data.action.size() <= 100 &&
+             data.targetId is string && data.targetId.size() <= 128 &&
+             data.targetCollection is string && (data.targetCollection == 'farmers' || data.targetCollection == 'transactions' || data.targetCollection == 'labor') &&
+             data.timestamp is string &&
+             data.details is string && data.details.size() <= 1000;
+    }
+
+  }
+}

@@ -1,0 +1,344 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System operators and admin user profiles",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The unique Firebase Auth UID of the user or operator"
+        },
+        "name": {
+          "type": "string",
+          "description": "Full name of the user or operator"
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the user (e.g., kachramtech@gmail.com for Super Admin)"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["super_admin", "operator"],
+          "description": "User hierarchy role determining access privileges"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when this user profile was created"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when this user profile was last updated"
+        }
+      },
+      "required": ["id", "name", "email", "role", "createdAt", "updatedAt"]
+    },
+    "Farmer": {
+      "title": "Farmer",
+      "description": "Farmer profiles registered in the system",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique auto-generated ID of the farmer"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the farmer in Hindi/Regional language or English"
+        },
+        "village": {
+          "type": "string",
+          "description": "Village or region of the farmer"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Contact number of the farmer"
+        },
+        "totalAcreage": {
+          "type": "number",
+          "description": "Total farm acreage in acres (रकबा एकड़ में)"
+        },
+        "activeCrop": {
+          "type": "string",
+          "description": "Active crop that expenses will link to by default"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when farmer profile was created"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when farmer profile was last updated"
+        },
+        "createdByOperatorId": {
+          "type": "string",
+          "description": "Auth UID of the operator or super admin who registered this farmer"
+        },
+        "lastUpdatedByOperatorId": {
+          "type": "string",
+          "description": "Auth UID of the operator or super admin who last modified this profile"
+        }
+      },
+      "required": ["id", "name", "village", "phone", "totalAcreage", "activeCrop", "createdAt", "updatedAt", "createdByOperatorId", "lastUpdatedByOperatorId"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Smart income/expense digital record for crops, mandi sales with transparent cuts and pending reminders",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique transaction ID"
+        },
+        "farmerId": {
+          "type": "string",
+          "description": "Valid Reference ID of the farmer"
+        },
+        "crop": {
+          "type": "string",
+          "description": "Crop associated with this transaction"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["income", "expense"],
+          "description": "Economic type of the transaction"
+        },
+        "category": {
+          "type": "string",
+          "description": "Category of expense/income (e.g., seed, fertilizer, pesticide, diesel, labor, crop_sale)"
+        },
+        "amount": {
+          "type": "number",
+          "description": "Total final transaction amount in INR"
+        },
+        "date": {
+          "type": "string",
+          "format": "date",
+          "description": "Financial date of entry (can be backdated via calendar)"
+        },
+        "financialYear": {
+          "type": "string",
+          "description": "Financial cycle identifier (e.g., '2026-2027')"
+        },
+        "isMandiSale": {
+          "type": "boolean",
+          "description": "True if this represents a sale in the grain market (मंडी)"
+        },
+        "grossWeight": {
+          "type": "number",
+          "description": "Gross crop weight in quintals (क्विंटल)"
+        },
+        "deductionRate": {
+          "type": "number",
+          "description": "Deductions per quintal in kilograms (कचरा/नमी की काट किलोग्राम प्रति क्विंटल)"
+        },
+        "deductions": {
+          "type": "number",
+          "description": "Total calculated deduction in quintals"
+        },
+        "netWeight": {
+          "type": "number",
+          "description": "Net Weight = Gross Weight - Deductions"
+        },
+        "ratePerQuintal": {
+          "type": "number",
+          "description": "Sale rate per quintal in INR"
+        },
+        "traderName": {
+          "type": "string",
+          "description": "Name of the grain merchant (आढ़ती/व्यापारी)"
+        },
+        "isCreditSale": {
+          "type": "boolean",
+          "description": "True if sold on credit or partial payment"
+        },
+        "pendingAmount": {
+          "type": "number",
+          "description": "Remaining receivable amount to be collected"
+        },
+        "dueDate": {
+          "type": "string",
+          "format": "date",
+          "description": "Agreed due date for outstanding balance reminder"
+        },
+        "paymentStatus": {
+          "type": "string",
+          "enum": ["paid", "partially_paid", "unpaid"],
+          "description": "Receive/Pay completion status"
+        },
+        "voiceNoteUrl": {
+          "type": "string",
+          "description": "URL to recorded Hindi/regional voice note stored in Firebase Storage"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Firebase server register time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Firebase server last modified time"
+        },
+        "createdByOperatorId": {
+          "type": "string",
+          "description": "Operator id recording the entry"
+        },
+        "lastUpdatedByOperatorId": {
+          "type": "string",
+          "description": "Operator id updating the entry"
+        }
+      },
+      "required": ["id", "farmerId", "crop", "type", "category", "amount", "date", "financialYear", "isMandiSale", "isCreditSale", "paymentStatus", "createdAt", "updatedAt", "createdByOperatorId", "lastUpdatedByOperatorId"]
+    },
+    "Labor": {
+      "title": "Labor",
+      "description": "Individual attendance or Bulk/Gang contractual workforce tracking on farms",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique labor entry ID"
+        },
+        "farmerId": {
+          "type": "string",
+          "description": "Associated farmer ID whose field the labor took place on"
+        },
+        "date": {
+          "type": "string",
+          "format": "date",
+          "description": "Work date"
+        },
+        "crop": {
+          "type": "string",
+          "description": "Crop associated with this labor expense"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["individual", "bulk_gang"],
+          "description": "Whether registered individually or as a contractor gang"
+        },
+        "laborerName": {
+          "type": "string",
+          "description": "Name of worker (Individual mode only)"
+        },
+        "attendance": {
+          "type": "string",
+          "enum": ["present", "half_day", "absent"],
+          "description": "Attendance status (Individual mode only)"
+        },
+        "workersCount": {
+          "type": "number",
+          "description": "Number of workers in the gang (Bulk mode only)"
+        },
+        "groupName": {
+          "type": "string",
+          "description": "Name of the labor gang/sardar (Bulk mode only)"
+        },
+        "contractAmount": {
+          "type": "number",
+          "description": "Total promised contract wage (Both modes, individual daily rate can compute as contract)"
+        },
+        "advancePaid": {
+          "type": "number",
+          "description": "Advance paid to worker or gang in INR"
+        },
+        "dueBalance": {
+          "type": "number",
+          "description": "Salary balance = contractAmount - advancePaid"
+        },
+        "workDescription": {
+          "type": "string",
+          "description": "Type of work performed (e.g., निराई, गुड़ाई, कटाई, बुवाई)"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Log creation time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Log modification time"
+        },
+        "createdByOperatorId": {
+          "type": "string",
+          "description": "Operator who created the log"
+        },
+        "lastUpdatedByOperatorId": {
+          "type": "string",
+          "description": "Operator who updated the log"
+        }
+      },
+      "required": ["id", "farmerId", "date", "crop", "mode", "contractAmount", "advancePaid", "dueBalance", "createdAt", "updatedAt", "createdByOperatorId", "lastUpdatedByOperatorId"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Commercial audit logs documenting operator actions and system edits",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique audit log ID"
+        },
+        "operatorId": {
+          "type": "string",
+          "description": "Auth UID of the operator who executed the action"
+        },
+        "operatorName": {
+          "type": "string",
+          "description": "Name of the operator"
+        },
+        "action": {
+          "type": "string",
+          "description": "Action performed (e.g. CREATE_FARMER, UPDATE_TRANSACTION)"
+        },
+        "targetId": {
+          "type": "string",
+          "description": "ID of the target document"
+        },
+        "targetCollection": {
+          "type": "string",
+          "enum": ["farmers", "transactions", "labor"],
+          "description": "The category collection of the target document"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO String representation of creation time"
+        },
+        "details": {
+          "type": "string",
+          "description": "Human-readable telemetry description of changes"
+        }
+      },
+      "required": ["id", "operatorId", "operatorName", "action", "targetId", "targetCollection", "timestamp", "details"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Users and operators of the application mappingauthUID"
+    },
+    "/farmers/{farmerId}": {
+      "schema": "Farmer",
+      "description": "Farmers root profiles in the system"
+    },
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Financial accounting records of income or expense"
+    },
+    "/labor/{laborId}": {
+      "schema": "Labor",
+      "description": "Workforce logs for individual and contractor workers"
+    },
+    "/audits/{auditId}": {
+      "schema": "AuditLog",
+      "description": "Immutable audit trails tracking operator operations and CRUD actions"
+    }
+  }
+}
