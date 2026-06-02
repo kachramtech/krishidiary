@@ -33,12 +33,14 @@ export interface Farmer {
 export type TransactionType = "income" | "expense";
 
 export interface MandiDetails {
-  grossWeight: number; // in quintals (क्विंटल)
+  grossWeight: number; // in quintals (क्विंटल) or KG (किग्रा)
   deductionRate: number; // in kg per quintal (कटौती प्रति क्विंटल)
   deductions: number; // calculated total deduction weight (in quintals)
   netWeight: number; // net weight = gross - deductions
-  ratePerQuintal: number; // rate per quintal (₹)
+  ratePerQuintal: number; // rate per quintal (₹) or rate per KG
   traderName: string; // dealer / aadhitya
+  deductKg?: number; // deduction in kg directly
+  rateType?: "kg" | "quintal"; // rate of sale
 }
 
 export interface CreditDetails {

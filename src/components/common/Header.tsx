@@ -9,7 +9,9 @@ export const Header: React.FC = () => {
     currentUser,
     handleLogout,
     financialYear,
-    setFinancialYear
+    setFinancialYear,
+    clearAllDatabaseData,
+    showConfirm
   } = useAppState();
 
   return (
@@ -59,10 +61,23 @@ export const Header: React.FC = () => {
         </select>
 
         {/* Sync status */}
-        <div className="flex items-center space-x-2 bg-emerald-950/25 border border-emerald-900/40 rounded-2xl px-3 py-1.5 text-xs text-emerald-400 font-bold font-sans">
-          <span className="w-2 h-2 bg-emerald-400 rounded-full animate-ping"></span>
-          <span>क्लाउड सिंक active</span>
-        </div>
+        {currentUser?.id === "guest" ? (
+          <div className="flex items-center space-x-2.5 bg-amber-950/30 border border-amber-850/40 rounded-2xl px-3 py-1.5 text-xs font-sans">
+            <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse shrink-0"></span>
+            <div className="leading-tight text-amber-400 font-medium">
+              <span className="font-extrabold uppercase text-[10px] block text-amber-300">⚠️ ऑफलाइन मोड (अतिथि)</span>
+              <span className="text-[9px] block text-slate-300 mt-0.5">डेटा केवल आपके ब्राउज़र (LocalStorage) में है, लाइव क्लाउड सिंक हेतु गूगल से लॉगिन करें।</span>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center space-x-2.5 bg-emerald-950/30 border border-emerald-850/40 rounded-2xl px-3 py-1.5 text-xs font-sans">
+            <span className="w-2 h-2 bg-emerald-400 rounded-full animate-ping shrink-0"></span>
+            <div className="leading-tight text-emerald-400">
+              <span className="font-extrabold uppercase text-[10px] block text-emerald-300">✓ क्लाउड सिंक active</span>
+              <span className="text-[9px] block text-slate-350 mt-0.5">डेटा रियल-टाइम में सुरक्षित रूप से आपके लाइव फायरबेस डेटाबेस (Firestore) में जा रहा है।</span>
+            </div>
+          </div>
+        )}
 
         {/* User profile details */}
         {currentUser && (
@@ -73,6 +88,18 @@ export const Header: React.FC = () => {
                 {currentUser.role === "super_admin" ? "⚙️ सुपर एडमिन" : "🌾 काउंटर ऑपरेटर"}
               </span>
             </div>
+            <button
+              onClick={() => {
+                showConfirm(
+                  "डेटा साफ करें ⚠️",
+                  "क्या आप निश्चित रूप से पूरा डेमो और सिंक किया गया डेटा साफ करना चाहते हैं? यह प्रक्रिया अपरिवर्तनीय है एवं आपका संपूर्ण डेटा स्थायी रूप से मिटा दिया जाएगा!",
+                  () => clearAllDatabaseData()
+                );
+              }}
+              className="text-rose-400 hover:text-white hover:bg-rose-950 px-3 py-1.5 rounded-xl border border-rose-900/40 bg-[#160f1c] font-black text-xs tracking-wide transition-all outline-none"
+            >
+              🗑️ डेटा साफ करें
+            </button>
             <button
               onClick={handleLogout}
               className="text-slate-400 hover:text-rose-400 font-bold text-xs tracking-wide bg-[#0f172a] hover:bg-rose-950 px-3 py-1.5 rounded-xl border border-slate-800/80 transition-all outline-none"

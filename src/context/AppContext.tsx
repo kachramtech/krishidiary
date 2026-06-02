@@ -8,13 +8,19 @@ import {
   deleteDoc, 
   onSnapshot, 
   serverTimestamp,
-  getDoc
+  getDoc,
+  getDocs
 } from "firebase/firestore";
 import { 
   signInWithPopup, 
   GoogleAuthProvider, 
   signOut, 
-  onAuthStateChanged 
+  onAuthStateChanged,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+  updatePassword,
+  updateEmail
 } from "firebase/auth";
 
 // INITIAL SEED DATA FOR SIMULATING 1000+ AGRI ECOSYSTEM STATE
@@ -47,12 +53,19 @@ interface AppContextType {
   // Authentication State
   authUser: any | null;
   authReady: boolean;
-  currentUser: { id: string; name: string; email: string; role: "super_admin" | "operator" } | null;
+  currentUser: { id: string; name: string; email: string; role: "super_admin" | "operator"; phone?: string } | null;
   loginError: string | null;
   setLoginError: (err: string | null) => void;
   handleGoogleLogin: () => Promise<void>;
+  handleEmailPasswordLogin: (email: string, password: string) => Promise<void>;
+  handleEmailPasswordRegister: (name: string, phone: string, email: string, password: string) => Promise<void>;
+  handlePasswordReset: (email: string) => Promise<void>;
   handleGuestLogin: () => void;
   handleLogout: () => Promise<void>;
+  allOperators: any[];
+  createOperatorByAdmin: (name: string, email: string, phone: string, password: string) => Promise<void>;
+  updateOperatorProfile: (userId: string, name: string, email: string, phone: string, password?: string) => Promise<void>;
+  deleteOperator: (userId: string) => Promise<void>;
 
   // Synchronized stores
   farmers: Farmer[];
@@ -68,13 +81,18 @@ interface AppContextType {
   setFarmerSearch: (v: string) => void;
   selectedCropFilter: string;
   setSelectedCropFilter: (v: string) => void;
+  clearAllDatabaseData: () => Promise<void>;
 
   // Mutative Actions (CRUDS)
   logAudit: (action: string, targetId: string, collectionName: "farmers" | "transactions" | "labor", details: string) => Promise<void>;
   createFarmer: (farmerForm: any, farmerFarms: any[]) => Promise<void>;
+  updateFarmer: (id: string, name: string, village: string, phone: string) => Promise<void>;
   createTransaction: (txForm: any) => Promise<void>;
+  updateTransaction: (id: string, txForm: any) => Promise<void>;
   createLabor: (laborForm: any) => Promise<void>;
-  handleAddPlotInline: (farmerId: string, name: string, acreage: number, crop: string) => Promise<void>;
+  handleAddPlotInline: (farmerId: string, name: string, acreage: number, crop: string) => Promise<string | undefined>;
+  handleDeletePlot: (farmerId: string, plotId: string) => Promise<void>;
+  handleUpdatePlot: (farmerId: string, plotId: string, name: string, acreage: number, crop: string) => Promise<void>;
   deleteFarmer: (id: string) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
   deleteLabor: (id: string) => Promise<void>;
@@ -96,6 +114,16 @@ interface AppContextType {
   isRecording: boolean;
   recordingSeconds: number;
   handleToggleVoiceRecord: (txFormSetter: any, modalOpenSetter: any) => void;
+
+  // Custom Confirm Dialog
+  confirmState: {
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  };
+  showConfirm: (title: string, message: string, onConfirm: () => void) => void;
+  closeConfirm: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -107,12 +135,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const [authUser, setAuthUser] = useState<any | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; role: "super_admin" | "operator" } | null>({
-    id: "guest",
-    name: "पब्लिक संचालक",
-    email: "guest@agriportal.in",
-    role: "super_admin"
-  });
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; role: "super_admin" | "operator"; phone?: string } | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
 
   // Sync state trackers
@@ -124,6 +147,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [labors, setLabors] = useState<LaborLog[]>([]);
   const [audits, setAudits] = useState<AuditLog[]>([]);
+  const [allOperators, setAllOperators] = useState<any[]>([]);
 
   // Local state search
   const [farmerSearch, setFarmerSearch] = useState("");
@@ -134,6 +158,37 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [timerRef, setTimerRef] = useState<NodeJS.Timeout | null>(null);
+
+  const [localDataRestored, setLocalDataRestored] = useState(false);
+
+  // Confirm Modal state & API
+  const [confirmState, setConfirmState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {}
+  });
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmState({
+      isOpen: true,
+      title,
+      message,
+      onConfirm: () => {
+        onConfirm();
+        setConfirmState(prev => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
+
+  const closeConfirm = () => {
+    setConfirmState(prev => ({ ...prev, isOpen: false }));
+  };
 
   // 1. SAVE/RESTORE LOCALSTORAGE FOR PERSISTENCY DURING GUEST OR DEMO MODE
   const saveGuestData = (type: "farmers" | "transactions" | "labors" | "audits", data: any[]) => {
@@ -153,33 +208,36 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setTransactions(gTxs ? JSON.parse(gTxs) : INITIAL_TRANSACTIONS);
       setLabors(gLabors ? JSON.parse(gLabors) : INITIAL_LABOR);
       setAudits(gAudits ? JSON.parse(gAudits) : INITIAL_AUDITS);
+      setLocalDataRestored(true);
+    } else {
+      setLocalDataRestored(false);
     }
   }, [currentUser]);
 
-  // Sync back local updates
+  // Sync back local updates (only runs after data is initially restored)
   useEffect(() => {
-    if (currentUser?.id === "guest" && farmers.length > 0) {
+    if (currentUser?.id === "guest" && localDataRestored) {
       saveGuestData("farmers", farmers);
     }
-  }, [farmers, currentUser]);
+  }, [farmers, currentUser, localDataRestored]);
 
   useEffect(() => {
-    if (currentUser?.id === "guest" && transactions.length > 0) {
+    if (currentUser?.id === "guest" && localDataRestored) {
       saveGuestData("transactions", transactions);
     }
-  }, [transactions, currentUser]);
+  }, [transactions, currentUser, localDataRestored]);
 
   useEffect(() => {
-    if (currentUser?.id === "guest" && labors.length > 0) {
+    if (currentUser?.id === "guest" && localDataRestored) {
       saveGuestData("labors", labors);
     }
-  }, [labors, currentUser]);
+  }, [labors, currentUser, localDataRestored]);
 
   useEffect(() => {
-    if (currentUser?.id === "guest" && audits.length > 0) {
+    if (currentUser?.id === "guest" && localDataRestored) {
       saveGuestData("audits", audits);
     }
-  }, [audits, currentUser]);
+  }, [audits, currentUser, localDataRestored]);
 
   // Auth Subscription
   useEffect(() => {
@@ -190,22 +248,34 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const userRef = doc(db, "users", user.uid);
         try {
           const userDoc = await getDoc(userRef);
-          let profileRole: "super_admin" | "operator" = user.email === "kachramtech@gmail.com" ? "super_admin" : "operator";
+          let profileRole: "super_admin" | "operator" = "super_admin";
           
           if (userDoc.exists()) {
             const uData = userDoc.data();
+            const isActuallyAssistant = uData.isAssistant === true || !!uData.createdByAdminId;
+            let resolvedRole: "super_admin" | "operator" = "super_admin";
+            if (isActuallyAssistant || uData.role === "operator_assistant") {
+              resolvedRole = "operator";
+            }
+            
+            // Auto migrate role to super_admin in Firestore for existing main farmers
+            if (resolvedRole === "super_admin" && uData.role !== "super_admin") {
+              await setDoc(userRef, { role: "super_admin" }, { merge: true });
+            }
+
             setCurrentUser({
               id: user.uid,
-              name: uData.name,
-              email: uData.email,
-              role: uData.role as any,
+              name: uData.name || "कृषि उपयोगकर्ता",
+              email: uData.email || user.email || "",
+              role: resolvedRole,
+              phone: uData.phone || "",
             });
           } else {
             const newProfile = {
               id: user.uid,
-              name: user.displayName || "कृषि ऑपरेटर",
+              name: user.displayName || "कृषि उपयोगकर्ता",
               email: user.email || "",
-              role: profileRole,
+              role: "super_admin" as const,
               createdAt: serverTimestamp(),
               updatedAt: serverTimestamp(),
             };
@@ -214,84 +284,18 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               id: user.uid,
               name: newProfile.name,
               email: newProfile.email,
-              role: newProfile.role,
+              role: "super_admin",
             });
           }
 
-          // Bootstrapper Check & Seeding
-          const checkFarmers = doc(db, "farmers", "farmer_1");
-          const farmerSnap = await getDoc(checkFarmers);
-          if (!farmerSnap.exists()) {
-            console.log("Seeding commercial database stores with Hindi presets...");
-            setIsSyncing(true);
-            
-            for (const f of INITIAL_FARMERS) {
-              await setDoc(doc(db, "farmers", f.id), {
-                ...f,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-                createdByOperatorId: user.uid,
-                lastUpdatedByOperatorId: user.uid,
-              });
-            }
-            for (const t of INITIAL_TRANSACTIONS) {
-              await setDoc(doc(db, "transactions", t.id), {
-                ...t,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-                createdByOperatorId: user.uid,
-                lastUpdatedByOperatorId: user.uid,
-                ...(t.isMandiSale && t.mandiDetails ? {
-                  grossWeight: Number(t.mandiDetails.grossWeight),
-                  deductionRate: Number(t.mandiDetails.deductionRate),
-                  deductions: Number(t.mandiDetails.deductions),
-                  netWeight: Number(t.mandiDetails.netWeight),
-                  ratePerQuintal: Number(t.mandiDetails.ratePerQuintal),
-                  traderName: t.mandiDetails.traderName
-                } : {}),
-                ...(t.isCreditSale && t.creditDetails ? {
-                  pendingAmount: Number(t.creditDetails.pendingAmount),
-                  dueDate: t.creditDetails.dueDate
-                } : {})
-              });
-            }
-            for (const l of INITIAL_LABOR) {
-              await setDoc(doc(db, "labor", l.id), {
-                ...l,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-                createdByOperatorId: user.uid,
-                lastUpdatedByOperatorId: user.uid,
-                ...(l.mode === "individual" && l.individualDetails ? {
-                  laborerName: l.individualDetails.laborerName,
-                  attendance: l.individualDetails.attendance
-                } : {}),
-                ...(l.mode === "bulk_gang" && l.bulkDetails ? {
-                  workersCount: Number(l.bulkDetails.workersCount),
-                  groupName: l.bulkDetails.groupName,
-                  workDescription: l.bulkDetails.workDescription
-                } : {})
-              });
-            }
-            for (const a of INITIAL_AUDITS) {
-              await setDoc(doc(db, "audits", a.id), {
-                ...a,
-                operatorId: user.uid,
-              });
-            }
-            setIsSyncing(false);
-          }
+          // Bootstrapper Check & Seeding COMPLETELY TURNED OFF to always respect manual connected user entries.
+          console.log("No seeding triggered: starting with a 100% clean slate.");
         } catch (error) {
           console.error("Critical Seeding/Auth Error: ", error);
         }
       } else {
         setAuthUser(null);
-        setCurrentUser({
-          id: "guest",
-          name: "पब्लिक संचालक",
-          email: "guest@agriportal.in",
-          role: "super_admin"
-        });
+        setCurrentUser(null);
       }
       setAuthReady(true);
     });
@@ -406,11 +410,31 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       handleFirestoreError(error, OperationType.LIST, "audits");
     });
 
+    const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((doc) => {
+        const d = doc.data();
+        list.push({
+          id: d.id || doc.id,
+          name: d.name || "",
+          email: d.email || "",
+          phone: d.phone || "",
+          role: d.role || "operator",
+          createdAt: d.createdAt || new Date().toISOString(),
+          updatedAt: d.updatedAt || new Date().toISOString(),
+        });
+      });
+      setAllOperators(list);
+    }, (error) => {
+      console.warn("Could not listen to users in real time:", error);
+    });
+
     return () => {
       unsubscribeFarmers();
       unsubscribeTransactions();
       unsubscribeLabor();
       unsubscribeAudits();
+      unsubscribeUsers();
     };
   }, [currentUser]);
 
@@ -451,6 +475,92 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const handleEmailPasswordLogin = async (email: string, password: string) => {
+    setLoginError(null);
+    const cleanEmail = email ? email.trim().toLowerCase() : "";
+    try {
+      await signInWithEmailAndPassword(auth, cleanEmail, password);
+    } catch (error: any) {
+      console.error("Email login error: ", error);
+      let errMsg = "लॉगिन विफल रहा। कृपया सही ईमेल और पासवर्ड दर्ज करें।";
+      if (error.code === "auth/invalid-credential" || error.code === "auth/user-not-found" || error.code === "auth/wrong-password") {
+        errMsg = "गलत ईमेल या पासवर्ड! कृपया जांचें।";
+      } else if (error.code === "auth/invalid-email") {
+        errMsg = "अमान्य ईमेल आईडी संरचना!";
+      } else if (error.code === "auth/missing-password") {
+        errMsg = "कृपया पासवर्ड दर्ज करें!";
+      }
+      setLoginError(errMsg);
+      throw new Error(errMsg);
+    }
+  };
+
+  const handleEmailPasswordRegister = async (name: string, phone: string, email: string, password: string) => {
+    setLoginError(null);
+    const cleanEmail = email ? email.trim().toLowerCase() : "";
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+      const user = userCredential.user;
+      
+      // Save operator profile to users collection
+      const userRef = doc(db, "users", user.uid);
+      let profileRole: "super_admin" | "operator" = "super_admin";
+      const newProfile = {
+        id: user.uid,
+        name: name,
+        email: cleanEmail,
+        phone: phone,
+        role: profileRole, // Use dynamically resolved role
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      
+      try {
+        await setDoc(userRef, newProfile);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.CREATE, `users/${user.uid}`);
+      }
+      
+      setCurrentUser({
+        id: user.uid,
+        name: newProfile.name,
+        email: newProfile.email,
+        role: newProfile.role,
+        phone: newProfile.phone,
+      });
+    } catch (error: any) {
+      console.error("Email registration error: ", error);
+      let errMsg = "उपयोगकर्ता पंजीकरण विफल रहा!";
+      if (error.code === "auth/email-already-in-use") {
+        errMsg = "यह ईमेल आईडी पहले से उपयोग में है!";
+      } else if (error.code === "auth/weak-password") {
+        errMsg = "पासवर्ड कम से कम 6 अक्षरों का होना चाहिए!";
+      } else if (error.code === "auth/invalid-email") {
+        errMsg = "अमान्य ईमेल प्रारूप!";
+      }
+      setLoginError(errMsg);
+      throw new Error(errMsg);
+    }
+  };
+
+  const handlePasswordReset = async (email: string) => {
+    setLoginError(null);
+    const cleanEmail = email ? email.trim().toLowerCase() : "";
+    try {
+      await sendPasswordResetEmail(auth, cleanEmail);
+    } catch (error: any) {
+      console.error("Password reset error: ", error);
+      let errMsg = "पासवर्ड रीसेट लिंक भेजने में त्रुटि हुई।";
+      if (error.code === "auth/user-not-found") {
+        errMsg = "इस ईमेल आईडी का कोई उपयोगकर्ता नहीं मिला!";
+      } else if (error.code === "auth/invalid-email") {
+        errMsg = "अमान्य ईमेल प्रारूप!";
+      }
+      setLoginError(errMsg);
+      throw new Error(errMsg);
+    }
+  };
+
   const handleGuestLogin = () => {
     setCurrentUser({
       id: "guest",
@@ -474,6 +584,93 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return;
     }
     await signOut(auth);
+  };
+
+  const createOperatorByAdmin = async (name: string, email: string, phone: string, password: string) => {
+    const isMainUser = currentUser?.role === "super_admin" || currentUser?.email?.toLowerCase().trim() === "kachramtech@gmail.com";
+    if (!isMainUser) {
+      throw new Error("केवल मुख्य स्वामी ही नया ऑपरेटर जोड़ सकता है!");
+    }
+    const cleanEmail = email.trim().toLowerCase();
+    let uid = "op_" + Date.now();
+    try {
+      const { initializeApp, deleteApp } = await import("firebase/app");
+      const { getAuth, createUserWithEmailAndPassword } = await import("firebase/auth");
+      const firebaseConfig = (await import("../../firebase-applet-config.json")).default;
+      const secApp = initializeApp(firebaseConfig, `SecondaryApp_${Date.now()}`);
+      const secAuth = getAuth(secApp);
+      const userCred = await createUserWithEmailAndPassword(secAuth, cleanEmail, password);
+      uid = userCred.user.uid;
+      await deleteApp(secApp);
+    } catch (e: any) {
+      console.warn("Failed creating secondary Auth user account. Creating fallback in database:", e);
+    }
+
+    const userRef = doc(db, "users", uid);
+    const newProfile = {
+      id: uid,
+      name,
+      email: cleanEmail,
+      phone,
+      role: "operator" as const,
+      isAssistant: true,
+      createdByAdminId: currentUser?.id || "main_admin",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    await setDoc(userRef, newProfile);
+    await logAudit("CREATE_OPERATOR", uid, "farmers", `नया ऑपरेटर जोड़ा गया: ${name}, ईमेल: ${cleanEmail}`);
+  };
+
+  const deleteOperator = async (userId: string) => {
+    const isMainUser = currentUser?.role === "super_admin" || currentUser?.email?.toLowerCase().trim() === "kachramtech@gmail.com";
+    if (!isMainUser) {
+      throw new Error("केवल मुख्य स्वामी ही ऑपरेटर को हटा सकता है!");
+    }
+    const userRef = doc(db, "users", userId);
+    try {
+      const userDoc = await getDoc(userRef);
+      const uData = userDoc.data();
+      const opName = uData?.name || "ऑपरेटर";
+      await deleteDoc(userRef);
+      await logAudit("DELETE_OPERATOR", userId, "farmers", `सहायक ऑपरेटर हटाया गया: ${opName}, ID: ${userId}`);
+    } catch (error) {
+      console.error("Error deleting operator:", error);
+      throw error;
+    }
+  };
+
+  const updateOperatorProfile = async (userId: string, name: string, email: string, phone: string, password?: string) => {
+    const userRef = doc(db, "users", userId);
+    const updates: any = {
+      name,
+      email: email.trim().toLowerCase(),
+      phone,
+      updatedAt: new Date().toISOString()
+    };
+    await setDoc(userRef, updates, { merge: true });
+
+    if (currentUser && currentUser.id === userId) {
+      setCurrentUser(prev => prev ? { ...prev, id: prev.id, role: prev.role, name, email, phone } : null);
+    }
+
+    if (auth.currentUser && auth.currentUser.uid === userId) {
+      if (email && auth.currentUser.email !== email) {
+        try {
+          await updateEmail(auth.currentUser, email);
+        } catch (e) {
+          console.error("Auth email update failed:", e);
+        }
+      }
+      if (password) {
+        try {
+          await updatePassword(auth.currentUser, password);
+        } catch (e) {
+          console.error("Auth password update failed:", e);
+        }
+      }
+    }
+    await logAudit("UPDATE_OPERATOR_PROFILE", userId, "farmers", `ऑपरेटर प्रोफाइल अपडेट किया गया: ${name}, ईमेल: ${email}`);
   };
 
   // Farmer creation
@@ -517,6 +714,38 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const updateFarmer = async (id: string, name: string, village: string, phone: string) => {
+    const targetFarmer = farmers.find(f => f.id === id);
+    if (!targetFarmer) return;
+
+    const opId = currentUser?.id === "guest" ? "guest_visitor" : auth.currentUser?.uid || "unknown";
+
+    const updatedFarmer: Farmer = {
+      ...targetFarmer,
+      name,
+      village,
+      phone,
+      updatedAt: new Date().toISOString(),
+      lastUpdatedByOperatorId: opId
+    };
+
+    if (currentUser?.id === "guest") {
+      setFarmers((prev) => prev.map((f) => f.id === id ? updatedFarmer : f));
+      await logAudit("UPDATE_FARMER", id, "farmers", `संशोधित किसान विवरण: ${name}, ग्राम: ${village}, फ़ोन: ${phone}`);
+      return;
+    }
+
+    try {
+      await setDoc(doc(db, "farmers", id), {
+        ...updatedFarmer,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      await logAudit("UPDATE_FARMER", id, "farmers", `संशोधित किसान विवरण: ${name}, ग्राम: ${village}, फ़ोन: ${phone}`);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `farmers/${id}`);
+    }
+  };
+
   // Transaction creation
   const createTransaction = async (txForm: any) => {
     let calculatedAmount = Number(txForm.amount);
@@ -525,19 +754,29 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     let mandiPayload: any = null;
     if (txForm.isMandiSale) {
-      const gross = Number(txForm.grossWeight);
-      const decRate = Number(txForm.deductionRate);
-      calculatedDeductions = gross * (decRate / 100);
-      netWeight = gross - calculatedDeductions;
-      calculatedAmount = netWeight * Number(txForm.amount);
+      const gross = Number(txForm.grossWeight || 0);
+      const deductKg = Number(txForm.deductKg || 0);
+      const rateVal = Number(txForm.amount || 0); // Rate entered
+      const rateType = txForm.rateType || "quintal"; // 'kg' or 'quintal'
+
+      netWeight = gross - deductKg;
+      calculatedDeductions = deductKg;
+      
+      if (rateType === "kg") {
+        calculatedAmount = netWeight * rateVal;
+      } else {
+        calculatedAmount = netWeight * (rateVal / 100);
+      }
 
       mandiPayload = {
         grossWeight: gross,
-        deductionRate: decRate,
-        deductions: Number(calculatedDeductions.toFixed(2)),
+        deductionRate: Number(((deductKg / (gross || 1)) * 100).toFixed(2)),
+        deductions: deductKg,
         netWeight: Number(netWeight.toFixed(2)),
-        ratePerQuintal: Number(txForm.amount),
-        traderName: txForm.traderName || "अज्ञात मंडी आढ़त"
+        ratePerQuintal: rateVal,
+        traderName: txForm.traderName || "अज्ञात मंडी आढ़त",
+        deductKg: deductKg,
+        rateType: rateType
       };
     }
 
@@ -546,7 +785,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     let creditPayload: any = null;
     if (txForm.isCreditSale) {
       creditPayload = {
-        pendingAmount: txForm.paymentStatus === "partially_paid" ? calculatedAmount * 0.4 : calculatedAmount,
+        pendingAmount: Number(txForm.pendingAmount !== undefined ? txForm.pendingAmount : calculatedAmount),
         dueDate: txForm.dueDate || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
       };
     }
@@ -555,31 +794,29 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       id,
       farmerId: txForm.farmerId,
       farmId: txForm.farmId || null,
-      crop: txForm.crop,
+      crop: txForm.crop || "",
       type: txForm.type,
       category: txForm.category,
       amount: Number(calculatedAmount.toFixed(2)),
       date: txForm.date,
       financialYear: financialYear,
-      isMandiSale: txForm.isMandiSale,
-      isCreditSale: txForm.isCreditSale,
-      paymentStatus: txForm.paymentStatus,
+      isMandiSale: !!txForm.isMandiSale,
+      isCreditSale: !!txForm.isCreditSale,
+      paymentStatus: txForm.paymentStatus || "paid",
       voiceNoteUrl: simulatedVoiceText ? "unprocessed_voice_recording_memo" : null,
-      voiceTranscription: simulatedVoiceText || null,
-      mandiDetails: mandiPayload,
-      creditDetails: creditPayload,
-      ...(txForm.isMandiSale ? {
-        grossWeight: mandiPayload.grossWeight,
-        deductionRate: mandiPayload.deductionRate,
-        deductions: mandiPayload.deductions,
-        netWeight: mandiPayload.netWeight,
-        ratePerQuintal: mandiPayload.ratePerQuintal,
-        traderName: mandiPayload.traderName
-      } : {}),
-      ...(txForm.isCreditSale ? {
-        pendingAmount: creditPayload.pendingAmount,
-        dueDate: creditPayload.dueDate
-      } : {})
+      voiceTranscription: simulatedVoiceText || txForm.voiceTranscription || null,
+      mandiDetails: mandiPayload || null,
+      creditDetails: creditPayload || null,
+      grossWeight: txForm.isMandiSale && mandiPayload ? mandiPayload.grossWeight : null,
+      deductionRate: txForm.isMandiSale && mandiPayload ? mandiPayload.deductionRate : null,
+      deductions: txForm.isMandiSale && mandiPayload ? mandiPayload.deductions : null,
+      netWeight: txForm.isMandiSale && mandiPayload ? mandiPayload.netWeight : null,
+      ratePerQuintal: txForm.isMandiSale && mandiPayload ? mandiPayload.ratePerQuintal : null,
+      traderName: txForm.isMandiSale && mandiPayload ? mandiPayload.traderName : null,
+      deductKg: txForm.isMandiSale && mandiPayload ? Number(txForm.deductKg || 0) : null,
+      rateType: txForm.isMandiSale && mandiPayload ? (txForm.rateType || "quintal") : null,
+      pendingAmount: txForm.isCreditSale && creditPayload ? creditPayload.pendingAmount : null,
+      dueDate: txForm.isCreditSale && creditPayload ? creditPayload.dueDate : null,
     };
 
     if (currentUser?.id === "guest") {
@@ -620,6 +857,106 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       );
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `transactions/${id}`);
+    }
+  };
+
+  // Transaction Update
+  const updateTransaction = async (id: string, txForm: any) => {
+    const targetTx = transactions.find(t => t.id === id);
+    if (!targetTx) return;
+
+    let calculatedAmount = Number(txForm.amount);
+    let calculatedDeductions = 0;
+    let netWeight = 0;
+
+    let mandiPayload: any = null;
+    if (txForm.isMandiSale) {
+      const gross = Number(txForm.grossWeight || 0);
+      const deductKg = Number(txForm.deductKg || 0);
+      const rateVal = Number(txForm.amount || 0); // Rate entered
+      const rateType = txForm.rateType || "quintal"; // 'kg' or 'quintal'
+
+      netWeight = gross - deductKg;
+      calculatedDeductions = deductKg;
+      
+      if (rateType === "kg") {
+        calculatedAmount = netWeight * rateVal;
+      } else {
+        calculatedAmount = netWeight * (rateVal / 100);
+      }
+
+      mandiPayload = {
+        grossWeight: gross,
+        deductionRate: Number(((deductKg / (gross || 1)) * 100).toFixed(2)),
+        deductions: deductKg,
+        netWeight: Number(netWeight.toFixed(2)),
+        ratePerQuintal: rateVal,
+        traderName: txForm.traderName || "अज्ञात मंडी आढ़त",
+        deductKg: deductKg,
+        rateType: rateType
+      };
+    }
+
+    let creditPayload: any = null;
+    if (txForm.isCreditSale) {
+      creditPayload = {
+        pendingAmount: Number(txForm.pendingAmount !== undefined ? txForm.pendingAmount : calculatedAmount),
+        dueDate: txForm.dueDate || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+      };
+    }
+
+    const txPayload = {
+      ...targetTx,
+      farmerId: txForm.farmerId,
+      farmId: txForm.farmId || null,
+      crop: txForm.crop || "",
+      category: txForm.category,
+      amount: Number(calculatedAmount.toFixed(2)),
+      date: txForm.date,
+      isMandiSale: !!txForm.isMandiSale,
+      isCreditSale: !!txForm.isCreditSale,
+      paymentStatus: txForm.paymentStatus || "paid",
+      mandiDetails: mandiPayload || null,
+      creditDetails: creditPayload || null,
+      updatedAt: new Date().toISOString(),
+      lastUpdatedByOperatorId: currentUser?.id === "guest" ? "guest_visitor" : auth.currentUser?.uid || "unknown",
+      // Flattened properties for convenience
+      grossWeight: txForm.isMandiSale && mandiPayload ? mandiPayload.grossWeight : null,
+      deductionRate: txForm.isMandiSale && mandiPayload ? mandiPayload.deductionRate : null,
+      deductions: txForm.isMandiSale && mandiPayload ? mandiPayload.deductions : null,
+      netWeight: txForm.isMandiSale && mandiPayload ? mandiPayload.netWeight : null,
+      ratePerQuintal: txForm.isMandiSale && mandiPayload ? mandiPayload.ratePerQuintal : null,
+      traderName: txForm.isMandiSale && mandiPayload ? mandiPayload.traderName : null,
+      deductKg: txForm.isMandiSale && mandiPayload ? Number(txForm.deductKg || 0) : null,
+      rateType: txForm.isMandiSale && mandiPayload ? (txForm.rateType || "quintal") : null,
+      pendingAmount: txForm.isCreditSale && creditPayload ? creditPayload.pendingAmount : null,
+      dueDate: txForm.isCreditSale && creditPayload ? creditPayload.dueDate : null,
+    };
+
+    if (currentUser?.id === "guest") {
+      setTransactions((prev) => prev.map((t) => t.id === id ? { ...txPayload, createdAt: t.createdAt } as any : t));
+      await logAudit(
+        "UPDATE_TRANSACTION", 
+        id, 
+        "transactions", 
+        `संशोधित लेनदेन विवरण ID: ${id}, राशि: ₹${txPayload.amount} [श्रेणी: ${txForm.category}]`
+      );
+      return;
+    }
+
+    try {
+      await setDoc(doc(db, "transactions", id), {
+        ...txPayload,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      await logAudit(
+        "UPDATE_TRANSACTION", 
+        id, 
+        "transactions", 
+        `संशोधित लेनदेन विवरण ID: ${id}, राशि: ₹${txPayload.amount} [श्रेणी: ${txForm.category}]`
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `transactions/${id}`);
     }
   };
 
@@ -701,9 +1038,9 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // Farmer plot inline creator
-  const handleAddPlotInline = async (farmerId: string, name: string, acreage: number, crop: string) => {
+  const handleAddPlotInline = async (farmerId: string, name: string, acreage: number, crop: string): Promise<string | undefined> => {
     const targetFarmer = farmers.find(f => f.id === farmerId);
-    if (!targetFarmer) return;
+    if (!targetFarmer) return undefined;
 
     const newPlot = {
       id: "farm_" + Date.now(),
@@ -718,7 +1055,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (currentUser?.id === "guest") {
       setFarmers(prev => prev.map(f => f.id === farmerId ? { ...f, farms: updatedFarms, totalAcreage: Number(updatedTotalAcreage.toFixed(2)) } : f));
       await logAudit("CREATE_FARM_PLOT", farmerId, "farmers", `नया खेत प्लॉट ${name} जोड़ा गया किसान ${targetFarmer.name} के लिए`);
-      return;
+      return newPlot.id;
     }
 
     try {
@@ -730,6 +1067,67 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         updatedAt: new Date().toISOString()
       }, { merge: true });
       await logAudit("CREATE_FARM_PLOT", farmerId, "farmers", `नया खेत प्लॉट ${name} जोड़ा गया किसान ${targetFarmer.name} के लिए`);
+      return newPlot.id;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `farmers/${farmerId}`);
+      return undefined;
+    }
+  };
+
+  // Farmer plot inline deletion handler
+  const handleDeletePlot = async (farmerId: string, plotId: string) => {
+    const targetFarmer = farmers.find(f => f.id === farmerId);
+    if (!targetFarmer) return;
+
+    const farmName = targetFarmer.farms?.find(fa => fa.id === plotId)?.name || "खेत";
+    const updatedFarms = (targetFarmer.farms || []).filter(item => item.id !== plotId);
+    const updatedTotalAcreage = updatedFarms.reduce((sum, f) => sum + f.acreage, 0);
+
+    if (currentUser?.id === "guest") {
+      setFarmers(prev => prev.map(f => f.id === farmerId ? { ...f, farms: updatedFarms, totalAcreage: Number(updatedTotalAcreage.toFixed(2)) } : f));
+      await logAudit("DELETE_FARM_PLOT", farmerId, "farmers", `खेत प्लॉट ${farmName} हटाया गया किसान ${targetFarmer.name} के खाते से`);
+      return;
+    }
+
+    try {
+      const docRef = doc(db, "farmers", farmerId);
+      await setDoc(docRef, {
+        ...targetFarmer,
+        farms: updatedFarms,
+        totalAcreage: Number(updatedTotalAcreage.toFixed(2)),
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      await logAudit("DELETE_FARM_PLOT", farmerId, "farmers", `खेत प्लॉट ${farmName} हटाया गया किसान ${targetFarmer.name} के खाते से`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `farmers/${farmerId}`);
+    }
+  };
+
+  // Farmer plot inline edit handler
+  const handleUpdatePlot = async (farmerId: string, plotId: string, name: string, acreage: number, crop: string) => {
+    const targetFarmer = farmers.find(f => f.id === farmerId);
+    if (!targetFarmer) return;
+
+    const updatedFarms = (targetFarmer.farms || []).map(item => 
+      item.id === plotId ? { ...item, name, acreage: Number(acreage), activeCrop: crop } : item
+    );
+    const updatedTotalAcreage = updatedFarms.reduce((sum, f) => sum + f.acreage, 0);
+
+    if (currentUser?.id === "guest") {
+      setFarmers(prev => prev.map(f => f.id === farmerId ? { ...f, farms: updatedFarms, totalAcreage: Number(updatedTotalAcreage.toFixed(2)) } : f));
+      await logAudit("UPDATE_FARM_PLOT", farmerId, "farmers", `खेत प्लॉट बदल किया: ${name}, रकबा: ${acreage} एकड़, फसल: ${crop} (किसान: ${targetFarmer.name})`);
+      return;
+    }
+
+    try {
+      const docRef = doc(db, "farmers", farmerId);
+      await setDoc(docRef, {
+        ...targetFarmer,
+        farms: updatedFarms,
+        totalAcreage: Number(updatedTotalAcreage.toFixed(2)),
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      await logAudit("UPDATE_FARM_PLOT", farmerId, "farmers", `खेत प्लॉट बदल किया: ${name}, रकबा: ${acreage} एकड़, फसल: ${crop} (किसान: ${targetFarmer.name})`);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `farmers/${farmerId}`);
     }
@@ -779,53 +1177,55 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
-  // Dynamic voice recorder simulation
+  // Dynamic voice recorder simulation using live registered farmers & fields
   const handleToggleVoiceRecord = (txFormSetter: any, modalOpenSetter: any) => {
     if (isRecording) {
       if (timerRef) clearInterval(timerRef);
       setIsRecording(false);
       setRecordingSeconds(0);
       
-      const simulatedPhrases = [
+      if (farmers.length === 0) {
+        alert("⚠️ आपके पास अभी कोई किसान पंजीकृत नहीं है। कृपया पहले मैनुअली 'किसान रजिस्ट्रेशन' करके खेत जोड़ें; उसके बाद आप बोलकर प्रविष्टि कर सकते हैं।");
+        return;
+      }
+      
+      const randomFarmer = farmers[Math.floor(Math.random() * farmers.length)];
+      const randomPlot = randomFarmer.farms && randomFarmer.farms.length > 0
+        ? randomFarmer.farms[Math.floor(Math.random() * randomFarmer.farms.length)]
+        : { id: "farm_any", name: "मुख्य खेत", activeCrop: randomFarmer.activeCrop || "गेहूं (Wheat)" };
+        
+      const currentSelectedCrop = randomPlot.activeCrop || randomFarmer.activeCrop || "गेहूं (Wheat)";
+      
+      const simulatedScenarios = [
         {
-          text: "रामचंद्र पाटीदार कुएं वाला खेत गेहूं फसल यूरिया खाद खर्च चौदह हजार आठ सौ रुपये",
-          farmerId: "farmer_1",
-          farmId: "farm_1_1",
-          crop: "गेहूं (Wheat)",
-          type: "expense" as const,
+          textExtra: "यूरिया खाद खर्च बारह हजार रुपये",
           category: "fertilizer",
-          amount: 14800
+          amount: 12000
         },
         {
-          text: "बलराम धाकड़ घर के सामने खेत सोयाबीन बीज बुवाई खर्चा बत्तीस हजार रुपये",
-          farmerId: "farmer_3",
-          farmId: "farm_3_1",
-          crop: "सोयाबीन (Soybean)",
-          type: "expense" as const,
+          textExtra: "बीज बुवाई खर्चे बत्तीस हजार रुपये",
           category: "seed",
           amount: 32000
         },
         {
-          text: "जगदीश चन्द्र डांगी नाला वाला खेत धान फसल डीजल खर्चा पचासी सौ रुपये",
-          farmerId: "farmer_2",
-          farmId: "farm_2_1",
-          crop: "धान (Paddy)",
-          type: "expense" as const,
+          textExtra: "डीजल पंप का सामान्य खर्च छह हजार रुपये",
           category: "diesel",
-          amount: 8500
+          amount: 6000
         }
       ];
       
-      const matchPhrase = simulatedPhrases[Math.floor(Math.random() * simulatedPhrases.length)];
-      setSimulatedVoiceText(matchPhrase.text);
+      const scenario = simulatedScenarios[Math.floor(Math.random() * simulatedScenarios.length)];
+      const textResult = `${randomFarmer.name} ${randomPlot.name} का ${currentSelectedCrop} फसल हेतु ${scenario.textExtra}`;
+      
+      setSimulatedVoiceText(textResult);
       
       txFormSetter({
-        farmerId: matchPhrase.farmerId,
-        farmId: matchPhrase.farmId,
-        crop: matchPhrase.crop,
-        type: matchPhrase.type,
-        category: matchPhrase.category,
-        amount: matchPhrase.amount,
+        farmerId: randomFarmer.id,
+        farmId: randomPlot.id,
+        crop: currentSelectedCrop,
+        type: "expense" as const,
+        category: scenario.category,
+        amount: scenario.amount,
         date: new Date().toISOString().split("T")[0],
         isMandiSale: false,
         grossWeight: 0,
@@ -835,9 +1235,9 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         dueDate: "",
         paymentStatus: "paid",
         voiceNoteUrl: "unprocessed_voice_recording_memo",
-        voiceTranscription: matchPhrase.text
+        voiceTranscription: textResult
       });
-      alert(`🎤 आवाज ट्रांसक्राइब की गयी!\nवाक्य: "${matchPhrase.text}" \n\n(प्रविष्टि प्रपत्र लोड किया गया है, कृपया समीक्षा करें और सुरक्षित करें)`);
+      alert(`🎤 आवाज ट्रांसक्राइब की गयी!\n\nवाक्य: "${textResult}"\n\n(आपके जोड़े गए किसान "${randomFarmer.name}" और खेत "${randomPlot.name}" को आवाज द्वारा पहचान लिया गया है!)`);
       modalOpenSetter(true);
     } else {
       setIsRecording(true);
@@ -924,6 +1324,65 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     window.open(`https://wa.me/91${farmer.phone}?text=${encoded}`, "_blank");
   };
 
+  const clearAllDatabaseData = async () => {
+    setIsSyncing(true);
+    try {
+      // Clear localStorage
+      localStorage.removeItem("agri_guest_farmers");
+      localStorage.removeItem("agri_guest_transactions");
+      localStorage.removeItem("agri_guest_labors");
+      localStorage.removeItem("agri_guest_audits");
+
+      // Loop and delete from firestore database if authenticated and connected
+      if (currentUser && currentUser.id !== "guest") {
+        const deletePromises: Promise<any>[] = [];
+        
+        // Directly fetch and delete ALL farmer documents physically from Firestore
+        const farmersCol = collection(db, "farmers");
+        const farmersSnap = await getDocs(farmersCol);
+        farmersSnap.forEach((docSnap) => {
+          deletePromises.push(deleteDoc(doc(db, "farmers", docSnap.id)));
+        });
+
+        // Directly fetch and delete ALL transactions documents physically from Firestore
+        const txsCol = collection(db, "transactions");
+        const txsSnap = await getDocs(txsCol);
+        txsSnap.forEach((docSnap) => {
+          deletePromises.push(deleteDoc(doc(db, "transactions", docSnap.id)));
+        });
+
+        // Directly fetch and delete ALL labor log documents physically from Firestore
+        const laborCol = collection(db, "labor");
+        const laborSnap = await getDocs(laborCol);
+        laborSnap.forEach((docSnap) => {
+          deletePromises.push(deleteDoc(doc(db, "labor", docSnap.id)));
+        });
+
+        // Directly fetch and delete ALL audit logs physically from Firestore
+        const auditsCol = collection(db, "audits");
+        const auditsSnap = await getDocs(auditsCol);
+        auditsSnap.forEach((docSnap) => {
+          deletePromises.push(deleteDoc(doc(db, "audits", docSnap.id)));
+        });
+
+        await Promise.all(deletePromises);
+      }
+
+      // Clear states immediately
+      setFarmers([]);
+      setTransactions([]);
+      setLabors([]);
+      setAudits([]);
+
+      alert("✓ पूरा डेटा सफलतापूर्वक साफ कर दिया गया है! अब आपका डेटाबेस पूरी तरह खाली और नया है।");
+    } catch (err) {
+      console.error("Error clearing database data: ", err);
+      alert("डेटा साफ करने में त्रुटि: " + String(err));
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -939,8 +1398,15 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         loginError,
         setLoginError,
         handleGoogleLogin,
+        handleEmailPasswordLogin,
+        handleEmailPasswordRegister,
+        handlePasswordReset,
         handleGuestLogin,
         handleLogout,
+        allOperators,
+        createOperatorByAdmin,
+        updateOperatorProfile,
+        deleteOperator,
         farmers,
         transactions,
         labors,
@@ -954,9 +1420,13 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setSelectedCropFilter,
         logAudit,
         createFarmer,
+        updateFarmer,
         createTransaction,
+        updateTransaction,
         createLabor,
         handleAddPlotInline,
+        handleDeletePlot,
+        handleUpdatePlot,
         deleteFarmer,
         deleteTransaction,
         deleteLabor,
@@ -973,7 +1443,11 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setSimulatedVoiceText,
         isRecording,
         recordingSeconds,
-        handleToggleVoiceRecord
+        handleToggleVoiceRecord,
+        clearAllDatabaseData,
+        confirmState,
+        showConfirm,
+        closeConfirm
       }}
     >
       {children}

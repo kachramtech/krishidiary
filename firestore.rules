@@ -64,11 +64,12 @@ service cloud.firestore {
 
     function isValidUser(data) {
       return data.keys().hasAll(['id', 'name', 'email', 'role', 'createdAt', 'updatedAt']) &&
-             data.keys().size() == 6 &&
+             (data.keys().size() == 6 || (data.keys().size() == 7 && data.keys().hasAll(['phone']))) &&
              data.id is string && data.id == request.auth.uid &&
              data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
              data.email is string && data.email.size() > 0 && data.email.size() <= 100 &&
              data.role is string && (data.role == 'operator' || data.role == 'super_admin') &&
+             (!data.keys().hasAll(['phone']) || (data.phone is string && data.phone.size() <= 30)) &&
              data.createdAt is timestamp &&
              data.updatedAt is timestamp;
     }
@@ -91,12 +92,12 @@ service cloud.firestore {
                     incoming().updatedAt == request.time &&
                     incoming().lastUpdatedByOperatorId == request.auth.uid;
                     
-      allow delete: if isAdmin();
+      allow delete: if isOperator();
     }
 
     function isValidFarmer(data) {
-      return data.keys().hasAll(['id', 'name', 'village', 'phone', 'totalAcreage', 'activeCrop', 'createdAt', 'updatedAt', 'createdByOperatorId', 'lastUpdatedByOperatorId']) &&
-             data.keys().size() == 10 &&
+      return data.keys().hasAll(['id', 'name', 'village', 'phone', 'totalAcreage', 'activeCrop', 'createdAt', 'updatedAt', 'createdByOperatorId', 'lastUpdatedByOperatorId', 'farms']) &&
+             data.keys().size() == 11 &&
              data.id is string && data.id.size() <= 128 &&
              data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
              data.village is string && data.village.size() > 0 && data.village.size() <= 200 &&
@@ -106,7 +107,8 @@ service cloud.firestore {
              data.createdAt is timestamp &&
              data.updatedAt is timestamp &&
              data.createdByOperatorId is string && (data.createdByOperatorId == request.auth.uid || isAdmin()) &&
-             data.lastUpdatedByOperatorId is string && data.lastUpdatedByOperatorId == request.auth.uid;
+             data.lastUpdatedByOperatorId is string && data.lastUpdatedByOperatorId == request.auth.uid &&
+             data.farms is list;
     }
 
     // C. Transactions Collection (Payments, Sales, Mandi Cuts with reminders)
@@ -135,7 +137,7 @@ service cloud.firestore {
                     incoming().updatedAt == request.time &&
                     incoming().lastUpdatedByOperatorId == request.auth.uid;
                     
-      allow delete: if isAdmin();
+      allow delete: if isOperator();
     }
 
     function isValidTransaction(data) {
@@ -203,7 +205,7 @@ service cloud.firestore {
                     incoming().updatedAt == request.time &&
                     incoming().lastUpdatedByOperatorId == request.auth.uid;
                     
-      allow delete: if isAdmin();
+      allow delete: if isOperator();
     }
 
     function isValidLabor(data) {

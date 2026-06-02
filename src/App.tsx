@@ -1,6 +1,7 @@
 import React from "react";
 import { AppStateProvider } from "./context/AppContext";
 import { AndroidDashboard } from "./views/AndroidDashboard";
+import { ConfirmModal } from "./components/common/ConfirmModal";
 
 const MainAppContent: React.FC = () => {
   return (
@@ -8,6 +9,7 @@ const MainAppContent: React.FC = () => {
       <main className="w-full flex justify-center items-center">
         <AndroidDashboard />
       </main>
+      <ConfirmModal />
     </div>
   );
 };

@@ -13,13 +13,19 @@ export const FarmerDetailCard: React.FC<FarmerDetailCardProps> = ({ farmer }) =>
     labors,
     deleteFarmer,
     handleAddPlotInline,
-    currentUser
+    handleDeletePlot,
+    handleUpdatePlot,
+    currentUser,
+    showConfirm
   } = useAppState();
 
   const [expanded, setExpanded] = useState(false);
   const [plotName, setPlotName] = useState("");
   const [plotAcreage, setPlotAcreage] = useState("");
   const [plotCrop, setPlotCrop] = useState("गेहूं (Wheat)");
+
+  // Local state for editing within this card
+  const [editingPlot, setEditingPlot] = useState<{ plotId: string, name: string, acreage: string, crop: string } | null>(null);
 
   const linkedTxs = transactions.filter((t) => t.farmerId === farmer.id);
   const totalSpentOnInputs = linkedTxs.filter((t) => t.type === "expense").reduce((sum, t) => sum + t.amount, 0);
@@ -73,19 +79,116 @@ export const FarmerDetailCard: React.FC<FarmerDetailCardProps> = ({ farmer }) =>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
               {farmer.farms && farmer.farms.length > 0 ? (
-                farmer.farms.map((f, i) => (
-                  <div key={f.id || i} className="bg-white p-3 rounded-2xl border border-slate-200 flex justify-between items-center shadow-xs leading-normal font-sans">
-                    <div>
-                      <p className="font-black text-slate-800">{f.name}</p>
-                      <p className="text-[10.5px] text-slate-400 mt-0.5">
-                        रकबा: <strong className="text-slate-700 font-mono font-bold">{f.acreage} एकड़</strong> | फसल: <strong className="text-emerald-700 font-extrabold">{f.activeCrop || farmer.activeCrop}</strong>
-                      </p>
+                farmer.farms.map((f, i) => {
+                  const isEditing = editingPlot && editingPlot.plotId === f.id;
+                  if (isEditing) {
+                    return (
+                      <div key={f.id || i} className="col-span-1 md:col-span-2 bg-[#f4f7fe] border border-cyan-300 p-3 rounded-2xl space-y-2 animate-fadeIn font-sans">
+                        <p className="font-extrabold text-[10px] text-cyan-900 flex items-center">
+                          ✏️ खेत विवरण सुधारें
+                        </p>
+                        <div className="grid grid-cols-1 gap-2">
+                          <input
+                            type="text"
+                            value={editingPlot.name}
+                            onChange={(e) => setEditingPlot({...editingPlot, name: e.target.value})}
+                            className="bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl outline-none text-[10.5px] font-sans font-bold text-slate-800"
+                            placeholder="खेत का नाम"
+                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={editingPlot.acreage}
+                              onChange={(e) => setEditingPlot({...editingPlot, acreage: e.target.value})}
+                              className="bg-white border border-slate-200 px-2 py-1.5 rounded-xl outline-none text-[10.5px] font-mono font-bold text-slate-800"
+                              placeholder="रकबा"
+                            />
+                            <select
+                              value={editingPlot.crop}
+                              onChange={(e) => setEditingPlot({...editingPlot, crop: e.target.value})}
+                              className="bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl outline-none text-[10.5px] font-sans font-bold text-slate-700"
+                            >
+                              <option value="गेहूं (Wheat)">गेहूं (Wheat)</option>
+                              <option value="धान (Paddy)">धान (Paddy)</option>
+                              <option value="सोयाबीन (Soybean)">सोयाबीन (Soybean)</option>
+                              <option value="लहसुन (Garlic)">लहसुन (Garlic)</option>
+                              <option value="प्याज (Onion)">प्याज (Onion)</option>
+                              <option value="चना (Gram)">चना (Gram)</option>
+                              <option value="मक्का (Maize)">मक्का (Maize)</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="flex justify-end space-x-2 text-[10px] font-bold">
+                          <button
+                            type="button"
+                            onClick={() => setEditingPlot(null)}
+                            className="px-2.5 py-1.5 text-slate-500 hover:bg-slate-250 border border-slate-200 rounded-xl cursor-pointer"
+                          >
+                            रद्द करें
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!editingPlot.name || !editingPlot.acreage) {
+                                alert("❌ कृपया खेत का नाम और रकबा भरें!");
+                                return;
+                              }
+                              await handleUpdatePlot(farmer.id, editingPlot.plotId, editingPlot.name, Number(editingPlot.acreage), editingPlot.crop);
+                              setEditingPlot(null);
+                            }}
+                            className="px-3 py-1.5 bg-cyan-700 hover:bg-cyan-800 text-white rounded-xl shadow-xs cursor-pointer"
+                          >
+                            सुरक्षित करें 💾
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={f.id || i} className="bg-white p-3 rounded-2xl border border-slate-200 flex justify-between items-center shadow-xs leading-normal font-sans">
+                      <div>
+                        <p className="font-black text-slate-800 text-[10.5px] flex items-center">
+                          <span>{f.name}</span>
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          रकबा: <strong className="text-slate-705 font-mono font-bold">{f.acreage} एकड़</strong> | फसल: <strong className="text-emerald-700 font-extrabold">{f.activeCrop || farmer.activeCrop}</strong>
+                        </p>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2">
+                        <button
+                          type="button"
+                          title="विवरण सुधारें"
+                          onClick={() => setEditingPlot({
+                            plotId: f.id,
+                            name: f.name,
+                            acreage: String(f.acreage),
+                            crop: f.activeCrop || farmer.activeCrop || "सोयाबीन (Soybean)"
+                          })}
+                          className="bg-slate-50 border border-slate-100 hover:bg-indigo-50 hover:text-indigo-700 px-2 py-1 text-slate-500 transition-all text-[10px] font-bold rounded-lg cursor-pointer"
+                        >
+                          ✏️ सुधारें
+                        </button>
+                        <button
+                          type="button"
+                          title="हटाएं"
+                          onClick={() => {
+                            showConfirm(
+                              "खेत हटाएं ⚠️",
+                              `क्या आप वाकई इस खेत "${f.name}" को हटाना चाहते हैं? यह प्रक्रिया अपरिवर्तनीय है!`,
+                              () => handleDeletePlot(farmer.id, f.id)
+                            );
+                          }}
+                          className="bg-slate-50 border border-slate-100 hover:bg-rose-50 hover:text-rose-700 px-2 py-1 text-slate-500 transition-all text-[10px] font-bold rounded-lg cursor-pointer"
+                        >
+                          🗑️ हटाएं
+                        </button>
+                      </div>
                     </div>
-                    <span className="text-[9.5px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-100 rounded">
-                      खेत सक्रिय
-                    </span>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <p className="text-[10.5px] italic text-slate-400 text-center py-2 col-span-2">कोई खेत रजिस्टर्ड नहीं है।</p>
               )}
@@ -160,11 +263,13 @@ export const FarmerDetailCard: React.FC<FarmerDetailCardProps> = ({ farmer }) =>
             <span className="text-[9.5px] text-slate-400 block font-medium">खाता ID: {farmer.id}</span>
             <button
               onClick={() => {
-                if (confirm(`क्या आप वाकई किसान "${farmer.name}" की संपूर्ण प्रोफाइल मिटाना चाहते हैं?`)) {
-                  deleteFarmer(farmer.id);
-                }
+                showConfirm(
+                  "किसान प्रोफाइल हटाएं ⚠️",
+                  `क्या आप वाकई किसान "${farmer.name}" की संपूर्ण प्रोफाइल को मिटाना चाहते हैं? यह क्रिया अपरिवर्तनीय है!`,
+                  () => deleteFarmer(farmer.id)
+                );
               }}
-              className="text-rose-600 hover:text-rose-800 font-extrabold flex items-center space-x-1 outline-none hover:bg-rose-50 px-2 py-1 rounded"
+              className="text-rose-600 hover:text-rose-800 font-extrabold flex items-center space-x-1 outline-none hover:bg-rose-50 px-2 py-1 rounded cursor-pointer"
             >
               <Trash className="h-3 w-3" />
               <span>किसान मिटाएं</span>
