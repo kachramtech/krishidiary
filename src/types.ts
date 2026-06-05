@@ -69,6 +69,21 @@ export interface Transaction {
   updatedAt: string;
   createdByOperatorId: string;
   lastUpdatedByOperatorId: string;
+  grossWeight?: number | null;
+  deductionRate?: number | null;
+  deductions?: number | null;
+  netWeight?: number | null;
+  ratePerQuintal?: number | null;
+  traderName?: string | null;
+  deductKg?: number | null;
+  rateType?: "kg" | "quintal" | null;
+  pendingAmount?: number | null;
+  dueDate?: string | null;
+  editLogs?: Array<{
+    timestamp: string;
+    changedText: string;
+    operator: string;
+  }>;
 }
 
 export type LaborMode = "individual" | "bulk_gang";

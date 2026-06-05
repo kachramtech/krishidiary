@@ -65,6 +65,7 @@ export const AndroidDashboard: React.FC = () => {
     createTransaction,
     updateTransaction,
     createLabor,
+    updateLabor,
     deleteFarmer,
     deleteTransaction,
     deleteLabor,
@@ -263,15 +264,32 @@ export const AndroidDashboard: React.FC = () => {
     quantity: "",
     unit: "कि.ग्राम",
     pricePerUnit: "",
-    company: ""
+    company: "",
+    bagWeight: "50"
   });
 
   const [stockFilter, setStockFilter] = useState<"all" | "fertilizer" | "seed" | "pesticide">("all");
   const [stockTab, setStockTab] = useState<"list" | "report">("list");
   const [stockSearch, setStockSearch] = useState("");
   const [selectedStockToRefill, setSelectedStockToRefill] = useState<string>("new");
+  const [stockSelectedRegisteredId, setStockSelectedRegisteredId] = useState<string>("");
+  const [stockVarietyInput, setStockVarietyInput] = useState<string>("");
   const [editingStockItem, setEditingStockItem] = useState<any | null>(null);
+  const [editUnitMode, setEditUnitMode] = useState<"बोरी" | "कि.ग्राम" | "सामान्य">("सामान्य");
+  const [displayQty, setDisplayQty] = useState<number | "">("");
+  const [displayPrice, setDisplayPrice] = useState<number | "">("");
+  const [editingHistoryLogId, setEditingHistoryLogId] = useState<string | null>(null);
+  const [editLogQtyInput, setEditLogQtyInput] = useState<number | "">("");
+  const [editLogPriceInput, setEditLogPriceInput] = useState<number | "">("");
+  const [editLogUnitMode, setEditLogUnitMode] = useState<"बोरी" | "कि.ग्राम" | "सामान्य">("सामान्य");
   const [viewingStockHistoryItem, setViewingStockHistoryItem] = useState<any | null>(null);
+  const [viewingTransaction, setViewingTransaction] = useState<any | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
+  const toggleGroupExpanded = (groupKey: string) => {
+    setExpandedGroups(prev =>
+      prev.includes(groupKey) ? prev.filter(k => k !== groupKey) : [...prev, groupKey]
+    );
+  };
   const [showStockWarning, setShowStockWarning] = useState(false);
   const [stockWarningDetails, setStockWarningDetails] = useState<{
     type: "fertilizer" | "seed" | "pesticide";
@@ -285,6 +303,7 @@ export const AndroidDashboard: React.FC = () => {
   const [showRefillModal, setShowRefillModal] = useState(false);
   const [refillQuantity, setRefillQuantity] = useState("");
   const [stockQuickRefillItemId, setStockQuickRefillItemId] = useState<string | null>(null);
+  const [quickRefillUnit, setQuickRefillUnit] = useState<string>("कि.ग्राम");
   const [stockQuickRefillAmt, setStockQuickRefillAmt] = useState("");
 
   // Generic Quick Add State
@@ -299,7 +318,8 @@ export const AndroidDashboard: React.FC = () => {
     acreage: "2.5",
     crop: "",
     phone: "",
-    cropsPurchased: ""
+    cropsPurchased: "",
+    bagWeight: "50"
   });
 
   const handleQuickAddSubmit = async (e: React.FormEvent) => {
@@ -345,7 +365,8 @@ export const AndroidDashboard: React.FC = () => {
       const newFert = {
         id: "fert_" + Date.now(),
         name: quickAddFormState.name,
-        company: quickAddFormState.company
+        company: quickAddFormState.company,
+        bagWeight: Number(quickAddFormState.bagWeight) || 50
       };
       setRegisteredFertilizers(prev => [newFert, ...prev]);
       alert("✅ नयी खाद सफलतापूर्वक जोड़ी गई!");
@@ -389,11 +410,11 @@ export const AndroidDashboard: React.FC = () => {
   const [newFarmerState, setNewFarmerState] = useState({ name: "", phone: "", village: "मुख्य ग्राम" });
   const [cropForm, setCropForm] = useState({ name: "", variety: "", company: "" });
   const [merchantForm, setMerchantForm] = useState({ name: "", phone: "", cropsPurchased: "" });
-  const [fertilizerProfileForm, setFertilizerProfileForm] = useState({ name: "", company: "" });
+  const [fertilizerProfileForm, setFertilizerProfileForm] = useState({ name: "", company: "", bagWeight: "50" });
   const [pesticideProfileForm, setPesticideProfileForm] = useState({ name: "", company: "" });
 
   const [editingFertilizerId, setEditingFertilizerId] = useState<string | null>(null);
-  const [fertilizerEditForm, setFertilizerEditForm] = useState({ name: "", company: "" });
+  const [fertilizerEditForm, setFertilizerEditForm] = useState({ name: "", company: "", bagWeight: "50" });
 
   const [editingPesticideId, setEditingPesticideId] = useState<string | null>(null);
   const [pesticideEditForm, setPesticideEditForm] = useState({ name: "", company: "" });
@@ -438,6 +459,16 @@ export const AndroidDashboard: React.FC = () => {
       setFarmForm({ farmerId: "", name: "", acreage: "2.5", crop: "" });
       setShowAddForm(false);
     }
+  };
+
+  const getFertilizerBagWeight = (fertilizerName: string): number => {
+    if (!fertilizerName) return 50;
+    const cleanName = fertilizerName.trim().toLowerCase();
+    const matched = registeredFertilizers.find(f => 
+      cleanName.includes(f.name.toLowerCase().trim()) || 
+      f.name.toLowerCase().trim().includes(cleanName)
+    );
+    return matched?.bagWeight || 50;
   };
 
   const handleRegisterCropObj = (e: React.FormEvent) => {
@@ -487,13 +518,14 @@ export const AndroidDashboard: React.FC = () => {
     const newFert = {
       id: "fert_" + Date.now(),
       name: fertilizerProfileForm.name,
-      company: fertilizerProfileForm.company
+      company: fertilizerProfileForm.company,
+      bagWeight: Number(fertilizerProfileForm.bagWeight) || 50
     };
     setRegisteredFertilizers(prev => [newFert, ...prev]);
     alert("✅ नयी खाद सफलतापूर्वक पंजीकृत की गयी!");
-    setFertilizerProfileForm({ name: "", company: "" });
+    setFertilizerProfileForm({ name: "", company: "", bagWeight: "50" });
     setShowAddForm(false);
-    logAudit("REGISTER_FERTILIZER", newFert.id, "farmers", `पंजीकृत नयी खाद: ${fertilizerProfileForm.name} (ब्रांड/कंपनी: ${fertilizerProfileForm.company})`);
+    logAudit("REGISTER_FERTILIZER", newFert.id, "farmers", `पंजीकृत नयी खाद: ${fertilizerProfileForm.name} (ब्रांड/कंपनी: ${fertilizerProfileForm.company}, बोरी क्षमता: ${newFert.bagWeight} कि.ग्राम)`);
   };
 
   const handleRegisterPesticideObj = (e: React.FormEvent) => {
@@ -514,15 +546,15 @@ export const AndroidDashboard: React.FC = () => {
     logAudit("REGISTER_PESTICIDE", newPest.id, "farmers", `पंजीकृत नयी दवा: ${pesticideProfileForm.name} (ब्रांड/कंपनी: ${pesticideProfileForm.company})`);
   };
 
-  const handleUpdateFertilizerObj = (id: string, name: string, company: string) => {
+  const handleUpdateFertilizerObj = (id: string, name: string, company: string, bagWeight: number) => {
     if (!name || !company) {
       alert("❌ कृपया खाद का नाम और कंपनी का नाम दर्ज करें!");
       return;
     }
-    setRegisteredFertilizers(prev => prev.map(f => f.id === id ? { ...f, name, company } : f));
+    setRegisteredFertilizers(prev => prev.map(f => f.id === id ? { ...f, name, company, bagWeight: Number(bagWeight) || 50 } : f));
     setEditingFertilizerId(null);
     alert("✅ खाद का विवरण सफलतापूर्वक अपडेट किया गया!");
-    logAudit("UPDATE_FERTILIZER", id, "farmers", `संपादित खाद: ${name} (ब्रांड/कंपनी: ${company})`);
+    logAudit("UPDATE_FERTILIZER", id, "farmers", `संपादित खाद: ${name} (ब्रांड/कंपनी: ${company}, बोरी क्षमता: ${bagWeight} कि.ग्राम)`);
   };
 
   const handleUpdatePesticideObj = (id: string, name: string, company: string) => {
@@ -552,7 +584,8 @@ export const AndroidDashboard: React.FC = () => {
       acreage: "2.5",
       crop: defaultCropFormValue,
       phone: "",
-      cropsPurchased: ""
+      cropsPurchased: "",
+      bagWeight: "50"
     });
   };
 
@@ -568,6 +601,37 @@ export const AndroidDashboard: React.FC = () => {
     updateTime();
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
+  }, []);
+
+  // --- 📱 एंड्रॉयड / मोबाइल हार्डवेयर बैक बटन एकीकरण (Android Back Button Popstate Integrator) ---
+  useEffect(() => {
+    const currentHistState = window.history.state;
+    const stateKey = `${activeApp || "home"}_form_${showAddForm}`;
+    if (!currentHistState || currentHistState.stateKey !== stateKey) {
+      window.history.pushState(
+        { app: activeApp, showForm: showAddForm, stateKey },
+        "",
+        activeApp ? `#/${activeApp}${showAddForm ? "/add" : ""}` : "#/"
+      );
+    }
+  }, [activeApp, showAddForm]);
+
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const poppedState = event.state;
+      if (poppedState) {
+        setActiveApp(poppedState.app);
+        setShowAddForm(!!poppedState.showForm);
+      } else {
+        setActiveApp(null);
+        setShowAddForm(false);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
   }, []);
 
   const allPlots = farmers.reduce((acc: any[], f) => {
@@ -592,6 +656,7 @@ export const AndroidDashboard: React.FC = () => {
 
   // Form states
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
+  const [expandedIncomeGroupKeys, setExpandedIncomeGroupKeys] = useState<Record<string, boolean>>({});
   const [farmerForm, setFarmerForm] = useState({ name: "", village: "", phone: "", totalAcreage: 4, activeCrop: "" });
   const [incomeForm, setIncomeForm] = useState({ 
     farmerId: "", 
@@ -725,7 +790,7 @@ export const AndroidDashboard: React.FC = () => {
       crop: incomeForm.crop,
       type: "income",
       category: incomeForm.category,
-      amount: calculatedAmount,
+      amount: incomeForm.isMandiSale ? Number(incomeForm.amount) : calculatedAmount,
       date: incomeForm.date,
       isMandiSale: incomeForm.isMandiSale,
       grossWeight: Number(incomeForm.grossWeight || 0),
@@ -819,11 +884,20 @@ export const AndroidDashboard: React.FC = () => {
       isCreditSale: isCredit,
       dueDate: isCredit ? ((fertilizerForm as any).dueDate || "") : "",
       paymentStatus: isCredit ? "unpaid" : "paid",
-      voiceTranscription: `खाद सामग्री: ${fertilizerForm.fertilizerBrand}, मात्रा: ${fertilizerForm.bagsCount} बोरी, दर: ₹${fertilizerForm.costPerBag}/बोरी`
+      voiceTranscription: `खाद सामग्री: ${fertilizerForm.fertilizerBrand}, मात्रा: ${fertilizerForm.bagsCount} बोरी, दर: ₹${fertilizerForm.costPerBag}/बोरी`,
+      fertilizerBrand: fertilizerForm.fertilizerBrand,
+      bagsCount: fertilizerForm.bagsCount,
+      costPerBag: fertilizerForm.costPerBag
     };
-    await createTransaction(payload);
-    alert(`✅ खाद खर्च विवरण सहेजा गया! स्टॉक से ${fertilizerForm.bagsCount} बोरी कम किया गया। कुल लागत: ₹${calculatedAmount}`);
+    if (editingTransactionId) {
+      await updateTransaction(editingTransactionId, payload);
+      alert(`✅ खाद खर्च विवरण सफलतापूर्वक अपडेट कर दिया गया! कुल लागत: ₹${calculatedAmount}`);
+    } else {
+      await createTransaction(payload);
+      alert(`✅ खाद खर्च विवरण सहेजा गया! स्टॉक से ${fertilizerForm.bagsCount} बोरी कम किया गया। कुल लागत: ₹${calculatedAmount}`);
+    }
     setFertilizerForm({ farmerId: "", farmId: "", crop: "", fertilizerBrand: "", bagsCount: "2", costPerBag: "350", date: new Date().toISOString().split("T")[0] });
+    setEditingTransactionId(null);
     setShowAddForm(false);
   };
 
@@ -836,48 +910,130 @@ export const AndroidDashboard: React.FC = () => {
 
     const brandName = fertilizerForm.fertilizerBrand;
     const needed = Number(fertilizerForm.bagsCount || 0);
-    const stockItem = stockList.find(s => s.type === "fertilizer" && s.name.trim() === brandName.trim());
-    const currentQty = stockItem ? stockItem.quantity : 0;
+    const bagWeight = getFertilizerBagWeight(brandName);
+    const neededKg = needed * bagWeight;
 
-    if (currentQty < needed) {
+    // Detect old transaction details if we are editing
+    const oldTx = editingTransactionId ? transactions.find(t => t.id === editingTransactionId) : null;
+    let oldBags = 0;
+    let oldBrand = "";
+    let oldQtyKg = 0;
+    if (oldTx) {
+      oldBrand = (oldTx as any).fertilizerBrand || "";
+      oldBags = Number((oldTx as any).bagsCount || 0);
+      if (!oldBrand && oldTx.voiceTranscription) {
+        const brandMatch = oldTx.voiceTranscription.match(/खाद सामग्री:\s*(.*?),/);
+        const bagsMatch = oldTx.voiceTranscription.match(/मात्रा:\s*(\d+)\s*बोरी/);
+        if (brandMatch) oldBrand = brandMatch[1].trim();
+        if (bagsMatch) oldBags = Number(bagsMatch[1]);
+      }
+      if (oldBrand) {
+        oldQtyKg = oldBags * getFertilizerBagWeight(oldBrand);
+      }
+    }
+
+    const stockItem = stockList.find(s => 
+      s.type === "fertilizer" && 
+      (s.name.trim().toLowerCase() === brandName.trim().toLowerCase() || 
+       brandName.trim().toLowerCase().includes(s.name.trim().toLowerCase()))
+    );
+    
+    // Calculate current available stock in KG (incorporating the added back oldQtyKg if brand matches)
+    let currentQtyKg = 0;
+    if (stockItem) {
+      if (stockItem.unit === "बोरी") {
+        currentQtyKg = stockItem.quantity * bagWeight; 
+      } else {
+        currentQtyKg = stockItem.quantity;
+      }
+      const matchesOldBrand = oldBrand && (
+        stockItem.name.trim().toLowerCase() === oldBrand.trim().toLowerCase() ||
+        oldBrand.trim().toLowerCase().includes(stockItem.name.trim().toLowerCase())
+      );
+      if (matchesOldBrand) {
+        currentQtyKg += oldQtyKg;
+      }
+    }
+
+    if (currentQtyKg < neededKg) {
+      // Show warning popup. Show requirements converted back to bags for the farmer
+      const currentQtyBags = Number((currentQtyKg / bagWeight).toFixed(2));
+      
       setStockWarningDetails({
         type: "fertilizer",
         itemName: brandName || "चयनित खाद",
         neededQty: needed,
-        currentQty: currentQty,
+        currentQty: currentQtyBags,
         unit: "बोरी",
         callback: async (addedValue: number) => {
-          const totalStock = currentQty + addedValue;
-          if (totalStock >= needed) {
+          const addedValueInKg = addedValue * bagWeight;
+          const totalStockKg = currentQtyKg + addedValueInKg;
+          
+          if (totalStockKg >= neededKg) {
             setStockList(prev => prev.map(s => {
-              if (s.type === "fertilizer" && s.name.trim() === brandName.trim()) {
-                const finalQuantity = s.quantity - needed + addedValue;
-                const logRefill = {
-                  id: "hist_" + Date.now() + "_refill",
+              let qty = s.unit === "बोरी" ? s.quantity * getFertilizerBagWeight(s.name) : s.quantity;
+              let updated = false;
+              let historyLogs = s.history ? [...s.history] : [];
+
+              const isOldBrand = oldBrand && (
+                s.name.trim().toLowerCase() === oldBrand.trim().toLowerCase() ||
+                oldBrand.trim().toLowerCase().includes(s.name.trim().toLowerCase())
+              );
+              if (isOldBrand && oldQtyKg > 0) {
+                qty += oldQtyKg;
+                updated = true;
+                historyLogs.push({
+                  id: "hist_revert_" + Date.now(),
                   action: "refill" as const,
-                  quantityChange: addedValue,
-                  finalQuantity: s.quantity + addedValue,
+                  quantityChange: oldQtyKg,
+                  finalQuantity: qty,
                   operatorName: currentUser?.name || "मुख्य यूजर",
                   date: new Date().toISOString(),
-                  details: `त्वरित रिफिल: ${addedValue} ${s.unit} स्टॉक जोड़ा गया।`
-                };
-                const logUse = {
-                  id: "hist_" + (Date.now() + 1) + "_use",
+                  details: `संशोधन हेतु पुराना उपयोग (+${oldBags} बोरी) वापस स्टॉक में जोड़ा गया।`
+                });
+              }
+
+              const isNewBrand = s.type === "fertilizer" && (
+                s.name.trim().toLowerCase() === brandName.trim().toLowerCase() ||
+                brandName.trim().toLowerCase().includes(s.name.trim().toLowerCase())
+              );
+              if (isNewBrand) {
+                qty = qty + addedValueInKg - neededKg;
+                updated = true;
+                historyLogs.push({
+                  id: "hist_refill_" + Date.now(),
+                  action: "refill" as const,
+                  quantityChange: addedValueInKg,
+                  finalQuantity: qty + neededKg,
+                  operatorName: currentUser?.name || "मुख्य यूजर",
+                  date: new Date().toISOString(),
+                  details: `त्वरित रिफिल: +${addedValue} बोरी (${addedValueInKg} कि.ग्राम) स्टॉक जोड़ा गया।`
+                });
+                historyLogs.push({
+                  id: "hist_use_" + Date.now(),
                   action: "use" as const,
-                  quantityChange: -needed,
-                  finalQuantity,
+                  quantityChange: -neededKg,
+                  finalQuantity: qty,
                   operatorName: currentUser?.name || "मुख्य यूजर",
                   date: new Date().toISOString(),
-                  details: `${needed} ${s.unit} खाद खेत उपयोग हेतु प्रयोग की गई।`
+                  details: `${needed} बोरी (${neededKg} कि.ग्राम) खाद उपयोग किया गया।`
+                });
+              }
+
+              if (updated) {
+                return {
+                  ...s,
+                  quantity: qty,
+                  unit: "कि.ग्राम",
+                  history: historyLogs,
+                  updatedAt: new Date().toISOString()
                 };
-                const updatedHistory = s.history ? [logUse, logRefill, ...s.history] : [logUse, logRefill];
-                return { ...s, quantity: finalQuantity, history: updatedHistory, updatedAt: new Date().toISOString() };
               }
               return s;
             }));
             await submitFertilizerPayload();
           } else {
-            alert(`⚠️ अभी भी ${needed - totalStock} बोरी स्टॉक कम है!`);
+            alert(`⚠️ अभी भी ${needed - Number((totalStockKg / bagWeight).toFixed(2))} बोरी स्टॉक कम है!`);
           }
         }
       });
@@ -885,21 +1041,56 @@ export const AndroidDashboard: React.FC = () => {
       return;
     }
 
-    // Enough stock -> deduct
+    // Enough stock -> deduct in KG (reverting old transaction first if existing)
     setStockList(prev => prev.map(s => {
-      if (s.type === "fertilizer" && s.name.trim() === brandName.trim()) {
-        const finalQuantity = Math.max(0, s.quantity - needed);
-        const logUse = {
-          id: "hist_" + Date.now() + "_use",
-          action: "use" as const,
-          quantityChange: -needed,
-          finalQuantity,
+      let qty = s.unit === "बोरी" ? s.quantity * getFertilizerBagWeight(s.name) : s.quantity;
+      let updated = false;
+      let historyLogs = s.history ? [...s.history] : [];
+
+      const isOldBrand = oldBrand && (
+        s.name.trim().toLowerCase() === oldBrand.trim().toLowerCase() ||
+        oldBrand.trim().toLowerCase().includes(s.name.trim().toLowerCase())
+      );
+      if (isOldBrand && oldQtyKg > 0) {
+        qty += oldQtyKg;
+        updated = true;
+        historyLogs.push({
+          id: "hist_revert_" + Date.now(),
+          action: "refill" as const,
+          quantityChange: oldQtyKg,
+          finalQuantity: qty,
           operatorName: currentUser?.name || "मुख्य यूजर",
           date: new Date().toISOString(),
-          details: `${needed} ${s.unit} खाद खेत उपयोग हेतु प्रयोग की गई।`
+          details: `संशोधन हेतु पुराना उपयोग (+${oldBags} बोरी) वापस स्टॉक में जोड़ा गया।`
+        });
+      }
+
+      const isNewBrand = s.type === "fertilizer" && (
+        s.name.trim().toLowerCase() === brandName.trim().toLowerCase() ||
+        brandName.trim().toLowerCase().includes(s.name.trim().toLowerCase())
+      );
+      if (isNewBrand) {
+        qty = Math.max(0, qty - neededKg);
+        updated = true;
+        historyLogs.push({
+          id: "hist_use_" + Date.now(),
+          action: "use" as const,
+          quantityChange: -neededKg,
+          finalQuantity: qty,
+          operatorName: currentUser?.name || "मुख्य यूजर",
+          date: new Date().toISOString(),
+          details: `${needed} बोरी (${neededKg} कि.ग्राम) खाद उपयोग किया गया।`
+        });
+      }
+
+      if (updated) {
+        return {
+          ...s,
+          quantity: qty,
+          unit: "कि.ग्राम",
+          history: historyLogs,
+          updatedAt: new Date().toISOString()
         };
-        const updatedHistory = s.history ? [logUse, ...s.history] : [logUse];
-        return { ...s, quantity: finalQuantity, history: updatedHistory, updatedAt: new Date().toISOString() };
       }
       return s;
     }));
@@ -918,11 +1109,19 @@ export const AndroidDashboard: React.FC = () => {
       date: seedForm.date,
       isCreditSale: false,
       paymentStatus: "paid",
-      voiceTranscription: `बीज प्रविष्टि: ${seedForm.seedVariety}, वज़न: ${seedForm.quantityKg} कि.ग्रा.`
+      voiceTranscription: `बीज प्रविष्टि: ${seedForm.seedVariety}, वज़न: ${seedForm.quantityKg} कि.ग्रा.`,
+      seedVariety: seedForm.seedVariety,
+      quantityKg: seedForm.quantityKg
     };
-    await createTransaction(payload);
-    alert(`✅ बीज उपयोग विवरण सफलतापूर्वक सहेजा गया! स्टॉक से ${seedForm.quantityKg} कि.ग्रा. कम किया गया।`);
+    if (editingTransactionId) {
+      await updateTransaction(editingTransactionId, payload);
+      alert(`✅ बीज उपयोग विवरण सफलतापूर्वक अपडेट कर दिया गया!`);
+    } else {
+      await createTransaction(payload);
+      alert(`✅ बीज उपयोग विवरण सफलतापूर्वक सहेजा गया! स्टॉक से ${seedForm.quantityKg} कि.ग्रा. कम किया गया।`);
+    }
     setSeedForm({ farmerId: "", farmId: "", crop: "", seedVariety: "", quantityKg: "40", cost: "1800", date: new Date().toISOString().split("T")[0] });
+    setEditingTransactionId(null);
     setShowAddForm(false);
   };
 
@@ -935,8 +1134,29 @@ export const AndroidDashboard: React.FC = () => {
 
     const seedName = seedForm.seedVariety;
     const needed = Number(seedForm.quantityKg || 0);
+
+    // Detect old transaction details if we are editing
+    const oldTx = editingTransactionId ? transactions.find(t => t.id === editingTransactionId) : null;
+    let oldQtyKg = 0;
+    let oldSeedVariety = "";
+    if (oldTx) {
+      oldSeedVariety = (oldTx as any).seedVariety || "";
+      oldQtyKg = Number((oldTx as any).quantityKg || 0);
+      if (!oldSeedVariety && oldTx.voiceTranscription) {
+        const varMatch = oldTx.voiceTranscription.match(/बीज प्रविष्टि:\s*(.*?),/);
+        const qtyMatch = oldTx.voiceTranscription.match(/वज़न:\s*([\d.]+)\s*कि.ग्राम/);
+        if (varMatch) oldSeedVariety = varMatch[1].trim();
+        if (qtyMatch) oldQtyKg = Number(qtyMatch[1]);
+      }
+    }
+
     const stockItem = stockList.find(s => s.type === "seed" && s.name.trim() === seedName.trim());
-    const currentQty = stockItem ? stockItem.quantity : 0;
+    
+    // Calculate current available stock (incorporating the added back oldQtyKg if variety matches)
+    let currentQty = stockItem ? stockItem.quantity : 0;
+    if (oldSeedVariety && seedName && oldSeedVariety.trim().toLowerCase() === seedName.trim().toLowerCase()) {
+      currentQty += oldQtyKg;
+    }
 
     if (currentQty < needed) {
       setStockWarningDetails({
@@ -944,39 +1164,67 @@ export const AndroidDashboard: React.FC = () => {
         itemName: seedName || "चयनित बीज",
         neededQty: needed,
         currentQty: currentQty,
-        unit: "कि.ग्रा.",
+        unit: "कि.ग्राम",
         callback: async (addedValue: number) => {
           const totalStock = currentQty + addedValue;
           if (totalStock >= needed) {
             setStockList(prev => prev.map(s => {
-              if (s.type === "seed" && s.name.trim() === seedName.trim()) {
-                const finalQuantity = s.quantity - needed + addedValue;
-                const logRefill = {
-                  id: "hist_" + Date.now() + "_refill",
+              let qty = s.quantity;
+              let updated = false;
+              let historyLogs = s.history ? [...s.history] : [];
+
+              const isOldBrand = oldSeedVariety && s.type === "seed" && s.name.trim().toLowerCase() === oldSeedVariety.trim().toLowerCase();
+              if (isOldBrand && oldQtyKg > 0) {
+                qty += oldQtyKg;
+                updated = true;
+                historyLogs.push({
+                  id: "hist_revert_" + Date.now(),
+                  action: "refill" as const,
+                  quantityChange: oldQtyKg,
+                  finalQuantity: qty,
+                  operatorName: currentUser?.name || "मुख्य यूजर",
+                  date: new Date().toISOString(),
+                  details: `संशोधन हेतु पुराना उपयोग (+${oldQtyKg} कि.ग्राम) वापस स्टॉक में जोड़ा गया।`
+                });
+              }
+
+              const isNewBrand = s.type === "seed" && s.name.trim().toLowerCase() === seedName.trim().toLowerCase();
+              if (isNewBrand) {
+                qty = qty + addedValue - needed;
+                updated = true;
+                historyLogs.push({
+                  id: "hist_refill_" + Date.now(),
                   action: "refill" as const,
                   quantityChange: addedValue,
-                  finalQuantity: s.quantity + addedValue,
+                  finalQuantity: qty + needed,
                   operatorName: currentUser?.name || "मुख्य यूजर",
                   date: new Date().toISOString(),
-                  details: `त्वरित रिफिल: ${addedValue} ${s.unit} स्टॉक जोड़ा गया।`
-                };
-                const logUse = {
-                  id: "hist_" + (Date.now() + 1) + "_use",
+                  details: `त्वरित रिफिल: +${addedValue} ${s.unit} स्टॉक जोड़ा गया।`
+                });
+                historyLogs.push({
+                  id: "hist_use_" + Date.now(),
                   action: "use" as const,
                   quantityChange: -needed,
-                  finalQuantity,
+                  finalQuantity: qty,
                   operatorName: currentUser?.name || "मुख्य यूजर",
                   date: new Date().toISOString(),
-                  details: `${needed} ${s.unit} बीज बुवाई/खेत उपयोग हेतु प्रयोग किया गया।`
+                  details: `${needed} ${s.unit} बीज खेतों में बुवाई हेतु उपयोग किया गया।`
+                });
+              }
+
+              if (updated) {
+                return {
+                  ...s,
+                  quantity: qty,
+                  history: historyLogs,
+                  updatedAt: new Date().toISOString()
                 };
-                const updatedHistory = s.history ? [logUse, logRefill, ...s.history] : [logUse, logRefill];
-                return { ...s, quantity: finalQuantity, history: updatedHistory, updatedAt: new Date().toISOString() };
               }
               return s;
             }));
             await submitSeedPayload();
           } else {
-            alert(`⚠️ अभी भी ${needed - totalStock} कि.ग्रा. स्टॉक कम है!`);
+            alert(`⚠️ अभी भी ${needed - totalStock} कि.ग्राम स्टॉक कम है!`);
           }
         }
       });
@@ -984,20 +1232,49 @@ export const AndroidDashboard: React.FC = () => {
       return;
     }
 
+    // Enough stock -> deduct
     setStockList(prev => prev.map(s => {
-      if (s.type === "seed" && s.name.trim() === seedName.trim()) {
-        const finalQuantity = Math.max(0, s.quantity - needed);
-        const logUse = {
-          id: "hist_" + Date.now() + "_use",
-          action: "use" as const,
-          quantityChange: -needed,
-          finalQuantity,
+      let qty = s.quantity;
+      let updated = false;
+      let historyLogs = s.history ? [...s.history] : [];
+
+      const isOldBrand = oldSeedVariety && s.type === "seed" && s.name.trim().toLowerCase() === oldSeedVariety.trim().toLowerCase();
+      if (isOldBrand && oldQtyKg > 0) {
+        qty += oldQtyKg;
+        updated = true;
+        historyLogs.push({
+          id: "hist_revert_" + Date.now(),
+          action: "refill" as const,
+          quantityChange: oldQtyKg,
+          finalQuantity: qty,
           operatorName: currentUser?.name || "मुख्य यूजर",
           date: new Date().toISOString(),
-          details: `${needed} ${s.unit} बीज बुवाई/खेत उपयोग हेतु प्रयोग किया गया।`
+          details: `संशोधन हेतु पुराना उपयोग (+${oldQtyKg} कि.ग्राम) वापस स्टॉक में जोड़ा गया।`
+        });
+      }
+
+      const isNewBrand = s.type === "seed" && s.name.trim().toLowerCase() === seedName.trim().toLowerCase();
+      if (isNewBrand) {
+        qty = Math.max(0, qty - needed);
+        updated = true;
+        historyLogs.push({
+          id: "hist_use_" + Date.now(),
+          action: "use" as const,
+          quantityChange: -needed,
+          finalQuantity: qty,
+          operatorName: currentUser?.name || "मुख्य यूजर",
+          date: new Date().toISOString(),
+          details: `${needed} ${s.unit} बीज खेतों में बुवाई हेतु उपयोग किया गया।`
+        });
+      }
+
+      if (updated) {
+        return {
+          ...s,
+          quantity: qty,
+          history: historyLogs,
+          updatedAt: new Date().toISOString()
         };
-        const updatedHistory = s.history ? [logUse, ...s.history] : [logUse];
-        return { ...s, quantity: finalQuantity, history: updatedHistory, updatedAt: new Date().toISOString() };
       }
       return s;
     }));
@@ -1016,11 +1293,19 @@ export const AndroidDashboard: React.FC = () => {
       date: pesticideForm.date,
       isCreditSale: false,
       paymentStatus: "paid",
-      voiceTranscription: `दवा / कीटनाशक प्रविष्टि: ${pesticideForm.productName}, उपयोग मात्रा: ${pesticideForm.quantity || 1} लीटर/इकाई`
+      voiceTranscription: `दवा / कीटनाशक प्रविष्टि: ${pesticideForm.productName}, उपयोग मात्रा: ${pesticideForm.quantity || 1} लीटर/इकाई`,
+      productName: pesticideForm.productName,
+      quantity: pesticideForm.quantity
     };
-    await createTransaction(payload);
-    alert(`✅ दवा / कीटनाशक छिड़काव विवरण सुरक्षित! स्टॉक से ${pesticideForm.quantity || 1} लीटर कम किया गया।`);
+    if (editingTransactionId) {
+      await updateTransaction(editingTransactionId, payload);
+      alert(`✅ दवा / कीटनाशक छिड़काव विवरण सफलतापूर्वक अपडेट कर दिया गया!`);
+    } else {
+      await createTransaction(payload);
+      alert(`✅ दवा / कीटनाशक छिड़काव विवरण सुरक्षित! स्टॉक से ${pesticideForm.quantity || 1} लीटर कम किया गया।`);
+    }
     setPesticideForm({ farmerId: "", farmId: "", crop: "", productName: "", quantity: "1", cost: "950", date: new Date().toISOString().split("T")[0] });
+    setEditingTransactionId(null);
     setShowAddForm(false);
   };
 
@@ -1033,8 +1318,29 @@ export const AndroidDashboard: React.FC = () => {
 
     const pestName = pesticideForm.productName;
     const needed = Number(pesticideForm.quantity || 1);
+
+    // Detect old transaction details if we are editing
+    const oldTx = editingTransactionId ? transactions.find(t => t.id === editingTransactionId) : null;
+    let oldQty = 0;
+    let oldPestName = "";
+    if (oldTx) {
+      oldPestName = (oldTx as any).productName || "";
+      oldQty = Number((oldTx as any).quantity || 0);
+      if (!oldPestName && oldTx.voiceTranscription) {
+        const prodMatch = oldTx.voiceTranscription.match(/दवा \/ कीटनाशक प्रविष्टि:\s*(.*?),/);
+        const qtyMatch = oldTx.voiceTranscription.match(/मात्रा:\s*([\d.]+)/);
+        if (prodMatch) oldPestName = prodMatch[1].trim();
+        if (qtyMatch) oldQty = Number(qtyMatch[1]);
+      }
+    }
+
     const stockItem = stockList.find(s => s.type === "pesticide" && s.name.trim() === pestName.trim());
-    const currentQty = stockItem ? stockItem.quantity : 0;
+    
+    // Calculate current available stock (incorporating the added back oldQty if product matches)
+    let currentQty = stockItem ? stockItem.quantity : 0;
+    if (oldPestName && pestName && oldPestName.trim().toLowerCase() === pestName.trim().toLowerCase()) {
+      currentQty += oldQty;
+    }
 
     if (currentQty < needed) {
       setStockWarningDetails({
@@ -1047,28 +1353,56 @@ export const AndroidDashboard: React.FC = () => {
           const totalStock = currentQty + addedValue;
           if (totalStock >= needed) {
             setStockList(prev => prev.map(s => {
-              if (s.type === "pesticide" && s.name.trim() === pestName.trim()) {
-                const finalQuantity = s.quantity - needed + addedValue;
-                const logRefill = {
-                  id: "hist_" + Date.now() + "_refill",
+              let qty = s.quantity;
+              let updated = false;
+              let historyLogs = s.history ? [...s.history] : [];
+
+              const isOldBrand = oldPestName && s.type === "pesticide" && s.name.trim().toLowerCase() === oldPestName.trim().toLowerCase();
+              if (isOldBrand && oldQty > 0) {
+                qty += oldQty;
+                updated = true;
+                historyLogs.push({
+                  id: "hist_revert_" + Date.now(),
+                  action: "refill" as const,
+                  quantityChange: oldQty,
+                  finalQuantity: qty,
+                  operatorName: currentUser?.name || "मुख्य यूजर",
+                  date: new Date().toISOString(),
+                  details: `संशोधन हेतु पुराना उपयोग (+${oldQty} लीटर/इकाई) वापस स्टॉक में जोड़ा गया।`
+                });
+              }
+
+              const isNewBrand = s.type === "pesticide" && s.name.trim().toLowerCase() === pestName.trim().toLowerCase();
+              if (isNewBrand) {
+                qty = qty + addedValue - needed;
+                updated = true;
+                historyLogs.push({
+                  id: "hist_refill_" + Date.now(),
                   action: "refill" as const,
                   quantityChange: addedValue,
-                  finalQuantity: s.quantity + addedValue,
+                  finalQuantity: qty + needed,
                   operatorName: currentUser?.name || "मुख्य यूजर",
                   date: new Date().toISOString(),
-                  details: `त्वरित रिफिल: ${addedValue} ${s.unit} स्टॉक जोड़ा गया।`
-                };
-                const logUse = {
-                  id: "hist_" + (Date.now() + 1) + "_use",
+                  details: `त्वरित रिफिल: +${addedValue} ${s.unit} स्टॉक जोड़ा गया।`
+                });
+                historyLogs.push({
+                  id: "hist_use_" + Date.now(),
                   action: "use" as const,
                   quantityChange: -needed,
-                  finalQuantity,
+                  finalQuantity: qty,
                   operatorName: currentUser?.name || "मुख्य यूजर",
                   date: new Date().toISOString(),
-                  details: `${needed} ${s.unit} दवा खेत उपयोग हेतु प्रयोग की गई।`
+                  details: `${needed} ${s.unit} दवा खेत छिड़काव हेतु उपयोग की गई।`
+                });
+              }
+
+              if (updated) {
+                return {
+                  ...s,
+                  quantity: qty,
+                  history: historyLogs,
+                  updatedAt: new Date().toISOString()
                 };
-                const updatedHistory = s.history ? [logUse, logRefill, ...s.history] : [logUse, logRefill];
-                return { ...s, quantity: finalQuantity, history: updatedHistory, updatedAt: new Date().toISOString() };
               }
               return s;
             }));
@@ -1082,20 +1416,49 @@ export const AndroidDashboard: React.FC = () => {
       return;
     }
 
+    // Enough stock -> deduct
     setStockList(prev => prev.map(s => {
-      if (s.type === "pesticide" && s.name.trim() === pestName.trim()) {
-        const finalQuantity = Math.max(0, s.quantity - needed);
-        const logUse = {
-          id: "hist_" + Date.now() + "_use",
-          action: "use" as const,
-          quantityChange: -needed,
-          finalQuantity,
+      let qty = s.quantity;
+      let updated = false;
+      let historyLogs = s.history ? [...s.history] : [];
+
+      const isOldBrand = oldPestName && s.type === "pesticide" && s.name.trim().toLowerCase() === oldPestName.trim().toLowerCase();
+      if (isOldBrand && oldQty > 0) {
+        qty += oldQty;
+        updated = true;
+        historyLogs.push({
+          id: "hist_revert_" + Date.now(),
+          action: "refill" as const,
+          quantityChange: oldQty,
+          finalQuantity: qty,
           operatorName: currentUser?.name || "मुख्य यूजर",
           date: new Date().toISOString(),
-          details: `${needed} ${s.unit} दवा खेत उपयोग हेतु प्रयोग की गई।`
+          details: `संशोधन हेतु पुराना उपयोग (+${oldQty} लीटर/इकाई) वापस स्टॉक में जोड़ा गया।`
+        });
+      }
+
+      const isNewBrand = s.type === "pesticide" && s.name.trim().toLowerCase() === pestName.trim().toLowerCase();
+      if (isNewBrand) {
+        qty = Math.max(0, qty - needed);
+        updated = true;
+        historyLogs.push({
+          id: "hist_use_" + Date.now(),
+          action: "use" as const,
+          quantityChange: -needed,
+          finalQuantity: qty,
+          operatorName: currentUser?.name || "मुख्य यूजर",
+          date: new Date().toISOString(),
+          details: `${needed} ${s.unit} दवा खेत छिड़काव हेतु उपयोग की गई।`
+        });
+      }
+
+      if (updated) {
+        return {
+          ...s,
+          quantity: qty,
+          history: historyLogs,
+          updatedAt: new Date().toISOString()
         };
-        const updatedHistory = s.history ? [logUse, ...s.history] : [logUse];
-        return { ...s, quantity: finalQuantity, history: updatedHistory, updatedAt: new Date().toISOString() };
       }
       return s;
     }));
@@ -1124,9 +1487,15 @@ export const AndroidDashboard: React.FC = () => {
       groupName: laborFormState.groupName || "अनाम टोली",
       workDescription: laborFormState.workDescription || "विविध कृषि कार्य"
     };
-    await createLabor(payload);
-    alert("✅ लेबर हाजिरी / बकाया रजिस्टर अद्यतन किया गया!");
+    if (editingTransactionId) {
+      await updateLabor(editingTransactionId, payload);
+      alert("✅ लेबर विवरण सफलतापूर्वक अपडेट कर दिया गया!");
+    } else {
+      await createLabor(payload);
+      alert("✅ लेबर हाजिरी / बकाया रजिस्टर में सफलतापूर्वक जोड़ा गया!");
+    }
     setLaborFormState({ farmerId: "", farmId: "", crop: "", mode: "individual", laborerName: "", attendance: "present", workersCount: "5", groupName: "", workDescription: "", contractAmount: "", advancePaid: "", date: new Date().toISOString().split("T")[0] });
+    setEditingTransactionId(null);
     setShowAddForm(false);
   };
 
@@ -1207,7 +1576,7 @@ export const AndroidDashboard: React.FC = () => {
                 <div className="p-3 bg-gradient-to-tr from-indigo-805 from-blue-700 to-indigo-600 rounded-2.5xl shadow-lg border border-indigo-500/25 relative flex items-center justify-center hover:scale-105 transition-all w-12.5 h-12.5">
                   <Folder className="h-5.5 w-5.5 text-yellow-300 fill-yellow-250" />
                   <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-[9px] text-white font-black rounded-full flex items-center justify-center animate-bounce">
-                    7
+                    5
                   </span>
                 </div>
                 <span className="text-[10px] font-bold text-white mt-2 drop-shadow leading-tight font-sans">
@@ -1806,7 +2175,7 @@ export const AndroidDashboard: React.FC = () => {
                       <div className="bg-slate-900/40 p-3 rounded-2xl border border-slate-800/50 hover:border-emerald-500/25 transition-all">
                         <div className="text-[11px] font-bold text-white mb-1">📁 प्रबंधन फोल्डर (Management)</div>
                         <p className="text-[9.5px] text-slate-400 leading-normal font-sans">
-                          इसके भीतर 6 मुख्य क्रियाएं हैं: <strong className="text-slate-200">आय, व्यय, खाद, बीज, कीटनाशक</strong> एवं <strong className="text-slate-250">लेबर बही</strong> का पृथक और सटीक अंकन।
+                          इसके भीतर 5 मुख्य क्रियाएं हैं: <strong className="text-slate-200">फसल विक्रय, व्यय, लेबर बही, स्टॉक जोड़ें</strong> एवं <strong className="text-slate-250">स्टॉक उपयोग में</strong> का पृथक और सटीक अंकन।
                         </p>
                       </div>
 
@@ -1892,7 +2261,9 @@ export const AndroidDashboard: React.FC = () => {
               <button
                 onClick={() => {
                   setShowAddForm(false);
-                  if (["income", "expense", "fertilizer", "seed", "pesticide", "labor", "stock_management"].includes(activeApp || "")) {
+                  if (["fertilizer", "seed", "pesticide"].includes(activeApp || "")) {
+                    setActiveApp("folder_stock_usage");
+                  } else if (["income", "expense", "labor", "stock_management", "folder_stock_usage"].includes(activeApp || "")) {
                     setActiveApp("folder_management");
                   } else if (["farm_management", "crop_management", "merchant_management"].includes(activeApp || "")) {
                     setActiveApp("folder_profile");
@@ -1914,13 +2285,14 @@ export const AndroidDashboard: React.FC = () => {
                   {activeApp === "folder_profile" && "📁 प्रोफ़ाइल प्रबंधन"}
                   {activeApp === "folder_my_profile" && "👤 मेरी प्रोफाइल"}
                   {activeApp === "folder_reports" && "📁 रिपोर्ट"}
-                  {activeApp === "income" && "💰 आय प्रबंधन"}
+                  {activeApp === "folder_stock_usage" && "📦 स्टॉक उपयोग में"}
+                  {activeApp === "income" && "💰 फसल विक्रय"}
                   {activeApp === "expense" && "📈 व्यय प्रबंधन"}
                   {activeApp === "fertilizer" && "📦 खाद प्रबंधन"}
                   {activeApp === "seed" && "🌱 बीज प्रबंधन"}
                   {activeApp === "pesticide" && "💊 दवा प्रबंधन"}
                   {activeApp === "labor" && "👥 लेबर प्रबंधन"}
-                  {activeApp === "stock_management" && "📦 स्टॉक प्रबंधन"}
+                  {activeApp === "stock_management" && "📦 स्टॉक जोड़ें"}
                   {activeApp === "farmers" && "🌾 पंजीकृत किसान बही"}
                   {activeApp === "calculator" && "⚖️ मंडी तौल कैलकुलेटर"}
                   {activeApp === "rates" && "📈 मंडी दैनिक भाव"}
@@ -1969,7 +2341,7 @@ export const AndroidDashboard: React.FC = () => {
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
-                    {/* Item 1: आय प्रबंधन */}
+                    {/* Item 1: फसल विक्रय */}
                     <button
                       onClick={() => setActiveApp("income")}
                       className="p-4 bg-white border border-slate-100 hover:border-emerald-305 hover:bg-emerald-50/20 active:bg-emerald-50 rounded-[24px] shadow-sm hover:shadow transition-all text-left flex flex-col space-y-3 cursor-pointer outline-none"
@@ -1978,7 +2350,7 @@ export const AndroidDashboard: React.FC = () => {
                         <DollarSign className="h-5 w-5 text-white" />
                       </div>
                       <div>
-                        <span className="text-xs font-black text-slate-900 block font-sans">आय प्रबंधन</span>
+                        <span className="text-xs font-black text-slate-900 block font-sans">फसल विक्रय</span>
                         <span className="text-[9.5px] text-slate-400 font-sans mt-0.5 block leading-tight">उपज व फसल बिक्री</span>
                       </div>
                     </button>
@@ -1997,49 +2369,7 @@ export const AndroidDashboard: React.FC = () => {
                       </div>
                     </button>
 
-                    {/* Item 3: खाद प्रबंधन */}
-                    <button
-                      onClick={() => setActiveApp("fertilizer")}
-                      className="p-4 bg-white border border-slate-100 hover:border-cyan-305 hover:bg-cyan-50/20 active:bg-cyan-50 rounded-[24px] shadow-sm hover:shadow transition-all text-left flex flex-col space-y-3 cursor-pointer outline-none"
-                    >
-                      <div className="p-2.5 w-10 h-10 bg-gradient-to-tr from-cyan-600 to-sky-400 rounded-xl shadow border border-cyan-400/20 flex items-center justify-center">
-                        <Package className="h-5 w-5 text-white" />
-                      </div>
-                      <div>
-                        <span className="text-xs font-black text-slate-900 block font-sans">खाद प्रबंधन</span>
-                        <span className="text-[9.5px] text-slate-400 font-sans mt-0.5 block leading-tight">उर्वरक एवं खाद स्टॉक</span>
-                      </div>
-                    </button>
-
-                    {/* Item 4: बीज प्रबंधन */}
-                    <button
-                      onClick={() => setActiveApp("seed")}
-                      className="p-4 bg-white border border-slate-100 hover:border-emerald-305 hover:bg-emerald-50/20 active:bg-emerald-50 rounded-[24px] shadow-sm hover:shadow transition-all text-left flex flex-col space-y-3 cursor-pointer outline-none"
-                    >
-                      <div className="p-2.5 w-10 h-10 bg-gradient-to-tr from-green-700 to-emerald-555 rounded-xl shadow border border-emerald-500/10 flex items-center justify-center">
-                        <Dna className="h-5 w-5 text-white" />
-                      </div>
-                      <div>
-                        <span className="text-xs font-black text-slate-900 block font-sans">बीज प्रबंधन</span>
-                        <span className="text-[9.5px] text-slate-400 font-sans mt-0.5 block leading-tight">बीज खरीद व रिकॉर्ड</span>
-                      </div>
-                    </button>
-
-                    {/* Item 5: दवा प्रबंधन */}
-                    <button
-                      onClick={() => setActiveApp("pesticide")}
-                      className="p-4 bg-white border border-slate-100 hover:border-teal-305 hover:bg-teal-50/20 active:bg-teal-50 rounded-[24px] shadow-sm hover:shadow transition-all text-left flex flex-col space-y-3 cursor-pointer outline-none"
-                    >
-                      <div className="p-2.5 w-10 h-10 bg-gradient-to-tr from-teal-700 to-emerald-600 rounded-xl shadow border border-teal-500/20 flex items-center justify-center">
-                        <Droplet className="h-5 w-5 text-white" />
-                      </div>
-                      <div>
-                        <span className="text-xs font-black text-slate-900 block font-sans">दवा प्रबंधन</span>
-                        <span className="text-[9.5px] text-slate-400 font-sans mt-0.5 block leading-tight">कीटनाशक एवं छिड़काव</span>
-                      </div>
-                    </button>
-
-                    {/* Item 6: लेबर प्रबंधन */}
+                    {/* Item 3: लेबर प्रबंधन */}
                     <button
                       onClick={() => setActiveApp("labor")}
                       className="p-4 bg-white border border-slate-100 hover:border-indigo-305 hover:bg-indigo-50/20 active:bg-indigo-50 rounded-[24px] shadow-sm hover:shadow transition-all text-left flex flex-col space-y-3 cursor-pointer outline-none"
@@ -2053,22 +2383,96 @@ export const AndroidDashboard: React.FC = () => {
                       </div>
                     </button>
 
-                    {/* Item 7: स्टॉक प्रबंधन */}
+                    {/* Item 4: स्टॉक जोड़ें */}
                     <button
                       onClick={() => setActiveApp("stock_management")}
-                      className="p-4 bg-white border border-slate-100 hover:border-amber-305 hover:bg-amber-50/20 active:bg-amber-50 rounded-[24px] shadow-sm hover:shadow transition-all text-left flex flex-col space-y-3 cursor-pointer outline-none col-span-2"
+                      className="p-4 bg-white border border-slate-100 hover:border-amber-305 hover:bg-amber-50/20 active:bg-amber-50 rounded-[24px] shadow-sm hover:shadow transition-all text-left flex flex-col space-y-3 cursor-pointer outline-none"
                     >
                       <div className="p-2.5 w-10 h-10 bg-gradient-to-tr from-amber-600 to-amber-500 rounded-xl shadow border border-amber-550 flex items-center justify-center">
                         <Boxes className="h-5 w-5 text-white" />
                       </div>
+                      <div>
+                        <span className="text-xs font-black text-slate-900 block font-sans">📦 स्टॉक जोड़ें</span>
+                        <span className="text-[9.5px] text-slate-400 font-sans mt-0.5 block leading-tight">खाद, बीज एंव दवा स्टॉक</span>
+                      </div>
+                    </button>
+
+                    {/* Item 5: स्टॉक उपयोग में (Nested Folder) */}
+                    <button
+                      onClick={() => setActiveApp("folder_stock_usage")}
+                      className="p-4 bg-white border border-slate-100 hover:border-emerald-305 hover:bg-emerald-50/25 active:bg-emerald-55 rounded-[24px] shadow-sm hover:shadow transition-all text-left flex flex-col space-y-3 cursor-pointer outline-none col-span-2 relative overflow-hidden"
+                    >
+                      <div className="absolute right-4 top-4 text-lg opacity-25">📂</div>
+                      <div className="p-2.5 w-10 h-10 bg-gradient-to-tr from-teal-600 to-emerald-550 rounded-xl shadow border border-emerald-400/20 flex items-center justify-center">
+                        <Folder className="h-5 w-5 text-white fill-emerald-100" />
+                      </div>
                       <div className="flex justify-between items-center w-full">
                         <div>
-                          <span className="text-xs font-black text-slate-900 block font-sans">📦 स्टॉक प्रबंधन</span>
-                          <span className="text-[9.5px] text-slate-400 font-sans mt-0.5 block leading-tight">खाद, बीज एंव दवा स्टॉक</span>
+                          <span className="text-xs font-black text-slate-900 block font-sans">📂 स्टॉक उपयोग में</span>
+                          <span className="text-[9.5px] text-slate-400 font-sans mt-0.5 block leading-tight">खाद, बीज एवं कीटनाशक दवा प्रबंधन</span>
                         </div>
-                        <span className="bg-amber-100 text-amber-800 font-black text-[9px] px-2 py-0.5 rounded-full uppercase leading-normal">
-                          स्टॉक रिपोर्ट {stockList.length}
+                        <span className="bg-emerald-100 text-emerald-800 font-black text-[9px] px-2.5 py-1 rounded-full uppercase leading-none font-sans font-extrabold shrink-0">
+                          3 मॉड्यूल्स
                         </span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* === SUBFOLDER APP 4: स्टॉक उपयोग में (Stock Usage) === */}
+              {activeApp === "folder_stock_usage" && (
+                <div className="space-y-6 animate-scaleIn">
+                  <div className="p-4.5 bg-gradient-to-tr from-[#0f172a] to-[#162e24] border border-slate-800 rounded-[28px] text-white space-y-2 shadow-lg relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl"></div>
+                    <h3 className="text-xs font-black text-emerald-400 flex items-center space-x-2">
+                      <span>📦 स्टॉक उपयोग में (Stock Usage)</span>
+                    </h3>
+                    <p className="text-[10px] text-slate-300 font-sans leading-relaxed">
+                      अपनी खाद, बीज एवं छिड़काव कीटनाशक दवाओं के उपयोग व खर्चे का रिकॉर्ड प्रविष्ट करें।
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Item 1: खाद प्रबंधन */}
+                    <button
+                      onClick={() => setActiveApp("fertilizer")}
+                      className="p-4 bg-white border border-slate-100 hover:border-cyan-305 hover:bg-cyan-50/20 active:bg-cyan-50 rounded-[24px] shadow-sm hover:shadow transition-all text-left flex flex-col space-y-3 cursor-pointer outline-none"
+                    >
+                      <div className="p-2.5 w-10 h-10 bg-gradient-to-tr from-cyan-600 to-sky-400 rounded-xl shadow border border-cyan-400/20 flex items-center justify-center">
+                        <Package className="h-5 w-5 text-white" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-black text-slate-900 block font-sans">खाद प्रबंधन</span>
+                        <span className="text-[9.5px] text-slate-400 font-sans mt-0.5 block leading-tight">उर्वरक एवं खाद स्टॉक</span>
+                      </div>
+                    </button>
+
+                    {/* Item 2: बीज प्रबंधन */}
+                    <button
+                      onClick={() => setActiveApp("seed")}
+                      className="p-4 bg-white border border-slate-100 hover:border-emerald-305 hover:bg-emerald-50/20 active:bg-emerald-50 rounded-[24px] shadow-sm hover:shadow transition-all text-left flex flex-col space-y-3 cursor-pointer outline-none"
+                    >
+                      <div className="p-2.5 w-10 h-10 bg-gradient-to-tr from-green-700 to-emerald-555 rounded-xl shadow border border-emerald-500/10 flex items-center justify-center">
+                        <Dna className="h-5 w-5 text-white" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-black text-slate-900 block font-sans">बीज प्रबंधन</span>
+                        <span className="text-[9.5px] text-slate-400 font-sans mt-0.5 block leading-tight">बीज खरीद व रिकॉर्ड</span>
+                      </div>
+                    </button>
+
+                    {/* Item 3: दवा प्रबंधन */}
+                    <button
+                      onClick={() => setActiveApp("pesticide")}
+                      className="p-4 bg-white border border-slate-100 hover:border-teal-305 hover:bg-teal-50/20 active:bg-teal-50 rounded-[24px] shadow-sm hover:shadow transition-all text-left flex flex-col space-y-3 cursor-pointer outline-none col-span-2"
+                    >
+                      <div className="p-2.5 w-10 h-10 bg-gradient-to-tr from-teal-700 to-emerald-600 rounded-xl shadow border border-teal-500/20 flex items-center justify-center">
+                        <Droplet className="h-5 w-5 text-white" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-black text-slate-900 block font-sans">दवा प्रबंधन</span>
+                        <span className="text-[9.5px] text-slate-400 font-sans mt-0.5 block leading-tight">कीटनाशक एवं छिड़काव</span>
                       </div>
                     </button>
                   </div>
@@ -2325,7 +2729,7 @@ export const AndroidDashboard: React.FC = () => {
                           id="isMandiSale"
                           checked={incomeForm.isMandiSale}
                           onChange={(e) => setIncomeForm({ ...incomeForm, isMandiSale: e.target.checked })}
-                          className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
+                          className="w-4 h-4 text-emerald-650 border-slate-350 rounded focus:ring-emerald-500 cursor-pointer"
                         />
                         <label htmlFor="isMandiSale" className="font-black text-rose-800 cursor-pointer text-xs select-none">
                           🏪 मंडी माल बिकावली विवरण है? (तौल व काट गणना ऑन करें)
@@ -2351,7 +2755,7 @@ export const AndroidDashboard: React.FC = () => {
                             >
                               <option value="">-- व्यापारी का चयन करें --</option>
                               <option value="ANYA" className="text-emerald-700 font-extrabold bg-emerald-50">➕ अन्य (नया व्यापारी पंजीकृत करें)...</option>
-                              {[...registeredMerchants]
+                              {registeredMerchants && [...registeredMerchants]
                                 .sort((a, b) => a.name.localeCompare(b.name, "hi"))
                                 .map((m) => (
                                   <option key={m.id} value={m.name}>
@@ -2365,7 +2769,7 @@ export const AndroidDashboard: React.FC = () => {
                           {incomeForm.traderSelectMode === "anya" && (
                             <div className="p-3 bg-white border border-amber-200 rounded-xl grid grid-cols-2 gap-2 col-span-2 animate-fadeIn font-sans">
                               <div className="space-y-1 col-span-1">
-                                <label className="font-extrabold text-slate-700 block text-[10px]">व्यापारी का नाम (Name)</label>
+                                <label className="font-extrabold text-slate-705 block text-[10px]">व्यापारी का नाम (Name)</label>
                                 <input
                                   type="text"
                                   value={incomeForm.tempTraderName}
@@ -2375,7 +2779,7 @@ export const AndroidDashboard: React.FC = () => {
                                 />
                               </div>
                               <div className="space-y-1 col-span-1">
-                                <label className="font-extrabold text-slate-700 block text-[10px]">मोबाइल नंबर (Phone)</label>
+                                <label className="font-extrabold text-slate-705 block text-[10px]">मोबाइल नंबर (Phone)</label>
                                 <input
                                   type="text"
                                   value={incomeForm.tempTraderPhone}
@@ -2386,8 +2790,6 @@ export const AndroidDashboard: React.FC = () => {
                               </div>
                             </div>
                           )}
-
-                          {/* Gross weight, Deduct KG, Rate per Quintal/KG, and Rate type selection */}
                           <div className="space-y-1 col-span-1 font-sans">
                             <label className="font-extrabold text-amber-900 block text-[10px]">कुल वजन (Gross Weight kg) *</label>
                             <input
@@ -2532,99 +2934,231 @@ export const AndroidDashboard: React.FC = () => {
                       </button>
                     </form>
                   ) : (
-                    /* Searchable/Filterable Income List View */
-                    <div className="space-y-2.5 animate-fadeIn font-sans">
-                      {transactions.filter(t => t.type === "income").length > 0 ? (
-                        transactions.filter(t => t.type === "income").map((t) => {
-                          const farUser = farmers.find(f => f.id === t.farmerId);
-                          return (
-                            <div key={t.id} className="bg-white border border-slate-150 p-3.5 rounded-2xl relative space-y-1.5 shadow-sm">
-                              <div className="flex justify-between items-start">
-                                <div>
-                                  <strong className="text-xs block text-slate-850 font-black">{farUser?.name || "अज्ञात किसान"}</strong>
-                                  <span className="text-[10px] text-slate-400 block font-normal leading-tight mt-0.5">
-                                    📍 ग्राम: {farUser?.village} | फ़सल: {t.crop}
-                                  </span>
-                                </div>
-                                <span className="font-mono text-emerald-800 font-extrabold text-[12px] bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-xl">
-                                  +₹{t.amount.toLocaleString()}
-                                </span>
-                              </div>
+                    /* Grouped Searchable/Filterable Income List View */
+                    <div className="space-y-3.5 animate-fadeIn font-sans">
+                      {(() => {
+                        const incomeTransactions = transactions.filter(t => t.type === "income");
+                        
+                        // Group income transactions by farmId + crop
+                        const groupedIncome: {
+                          key: string;
+                          farmId: string;
+                          crop: string;
+                          farmerId: string;
+                          totalAmount: number;
+                          transactions: typeof transactions;
+                        }[] = [];
 
-                              <div className="text-[10px] text-slate-600 bg-slate-50 p-2 rounded-xl flex flex-col space-y-0.5">
-                                <div className="flex justify-between">
-                                  <span>विवरण / श्रेणी:</span>
-                                  <span className="font-bold">{t.category === "crop_sale" ? "🌾 फसल उपज बिक्री" : t.category === "subsidy" ? "🏛️ सरकारी सब्सिडी/मुआवजा" : t.category === "rent" ? "🚜 कृषि यंत्र किराया" : "📦 अन्य विविध आय"}</span>
+                        incomeTransactions.forEach(t => {
+                          const farmId = t.farmId || "unspecified";
+                          const crop = t.crop || "विविध";
+                          const farmerId = t.farmerId || "";
+                          const key = `${farmId}_${crop}`;
+                          
+                          let group = groupedIncome.find(g => g.key === key);
+                          if (!group) {
+                            group = {
+                              key,
+                              farmId,
+                              crop,
+                              farmerId,
+                              totalAmount: 0,
+                              transactions: []
+                            };
+                            groupedIncome.push(group);
+                          }
+                          group.totalAmount += Number(t.amount || 0);
+                          group.transactions.push(t);
+                        });
+
+                        // Sort groups so that the one with the latest transaction remains on top
+                        groupedIncome.sort((a, b) => {
+                          const latestA = Math.max(...a.transactions.map(t => new Date(t.date || 0).getTime()));
+                          const latestB = Math.max(...b.transactions.map(t => new Date(t.date || 0).getTime()));
+                          return latestB - latestA;
+                        });
+
+                        if (groupedIncome.length > 0) {
+                          return groupedIncome.map((group) => {
+                            const farUser = farmers.find(f => f.id === group.farmerId);
+                            const farmNames = group.farmId?.split(",").map(id => allPlots.find(p => p.id === id)?.name || id).join(", ");
+                            const isExpanded = !!expandedIncomeGroupKeys[group.key];
+
+                            return (
+                              <div key={group.key} className="bg-white border border-slate-150 p-4 rounded-2xl relative space-y-2 shadow-sm">
+                                {/* Header Area */}
+                                <div className="flex justify-between items-start">
+                                  <div>
+                                    <strong className="text-xs block text-slate-850 font-black">{farUser?.name || "अज्ञात किसान"}</strong>
+                                    <span className="text-[10px] text-slate-500 block font-normal leading-tight mt-0.5">
+                                      📍 ग्राम: {farUser?.village} | 🌾 फ़सल: <strong className="text-emerald-800 font-extrabold">{group.crop}</strong>
+                                    </span>
+                                    <span className="text-[10px] text-slate-500 block font-normal mt-1">
+                                      🚜 खेत: <span className="font-bold text-slate-700">{farmNames || "सभी खेत"}</span>
+                                    </span>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="font-mono text-emerald-800 font-extrabold text-[12px] bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-xl block">
+                                      +₹{group.totalAmount.toLocaleString()}
+                                    </span>
+                                    <span className="text-[9px] text-slate-400 mt-1 block font-bold">
+                                      कुल {group.transactions.length} प्रविष्टियां
+                                    </span>
+                                  </div>
                                 </div>
-                                {t.isMandiSale && (
-                                  <>
-                                    <div className="flex justify-between">
-                                      <span>मंडी व्यापारी:</span>
-                                      <span className="font-bold text-amber-900">🏢 {t.traderName || "अज्ञात"}</span>
+
+                                {/* Custom Toggler with count and visual hint */}
+                                <div className="pt-2 border-t border-dashed border-slate-100 flex justify-between items-center text-[10px]">
+                                  <span className="text-slate-400">फसल बिक्री इतिहास:</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setExpandedIncomeGroupKeys(prev => ({
+                                        ...prev,
+                                        [group.key]: !prev[group.key]
+                                      }));
+                                    }}
+                                    className="text-indigo-650 hover:text-indigo-900 font-extrabold cursor-pointer bg-indigo-50 px-3 py-1.5 rounded-xl flex items-center space-x-1 transition-all"
+                                  >
+                                    <span>{isExpanded ? "विवरण छुपाएं 🔼" : "विवरण एवं इतिहास देखें 📖"}</span>
+                                  </button>
+                                </div>
+
+                                {isExpanded && (
+                                  <div className="mt-3 space-y-2.5 bg-slate-50 border border-slate-150/70 p-3 rounded-2xl animate-fadeIn">
+                                    <div className="text-[9.5px] font-extrabold text-slate-500 border-b border-slate-200 pb-1.5 flex justify-between">
+                                      <span>📅 फसल बिक्री इतिहास (बिक्रीवार विवरण):</span>
+                                      <span className="text-indigo-650 font-bold">कुल {group.transactions.length} बार बेचा गया</span>
                                     </div>
-                                    <div className="flex justify-between text-slate-500">
-                                      <span>वजन विवरण:</span>
-                                      <span>कुल: {t.grossWeight}kg | काट: {t.deductKg}kg</span>
-                                    </div>
-                                  </>
-                                )}
-                                {t.isCreditSale && (
-                                  <div className="flex justify-between text-rose-700 bg-rose-50/50 p-1.5 mt-1 rounded-lg">
-                                    <span>बकाया उधारी राशि:</span>
-                                    <span className="font-extrabold">₹{(t.pendingAmount || 0).toLocaleString()} (भुगतान तिथि: {t.dueDate})</span>
+
+                                    {/* Sub transactions listed under same crop same farm */}
+                                    {[...group.transactions].sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime()).map((t) => {
+                                      return (
+                                        <div key={t.id} className="p-3 bg-white border border-slate-150 rounded-xl space-y-2 shadow-xs relative">
+                                          <div className="flex justify-between items-start">
+                                            <div>
+                                              <span className="text-[9.5px] font-mono text-slate-400 font-bold">बेचा गया दिनांक: {t.date}</span>
+                                              <span className="text-[10px] text-slate-700 font-extrabold block">
+                                                {t.category === "crop_sale" ? "🌾 फसल उपज बिक्री" : t.category === "subsidy" ? "🏛️ सरकारी सब्सिडी/मुआवजा" : t.category === "rent" ? "🚜 कृषि यंत्र किराया" : "📦 अन्य विविध आय"}
+                                              </span>
+                                            </div>
+                                            <span className="font-mono text-emerald-800 font-bold text-[10.5px]">
+                                              +₹{t.amount.toLocaleString()}
+                                            </span>
+                                          </div>
+
+                                          <div className="text-[9px] text-slate-600 space-y-0.5 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                            {t.isMandiSale ? (
+                                              <>
+                                                <div className="flex justify-between">
+                                                  <span>🏢 मंडी व्यापारी (Trader):</span>
+                                                  <span className="font-extrabold text-amber-900">{t.traderName || "अज्ञात"}</span>
+                                                </div>
+                                                <div className="flex justify-between text-slate-500 text-[8.5px]">
+                                                  <span>⚖️ वजन: {t.grossWeight}kg | काट: {t.deductKg}kg</span>
+                                                  <span>दर: ₹{t.amount} ({t.rateType === "kg" ? "प्रति कि.ग्रा" : "प्रति क्विंटल"})</span>
+                                                </div>
+                                              </>
+                                            ) : (
+                                              <div className="flex justify-between">
+                                                <span>व्यापारी/भुगतानकर्ता:</span>
+                                                <span className="font-extrabold text-slate-700">{t.traderName || "सीधा खरीदार/अनाम"}</span>
+                                              </div>
+                                            )}
+                                            {t.isCreditSale && (
+                                              <div className="flex justify-between text-rose-700 bg-rose-50/40 p-1 rounded-md text-[8.5px] font-semibold mt-1">
+                                                <span>⚠️ बकाया उधारी:</span>
+                                                <span>₹{(t.pendingAmount || 0).toLocaleString()} (भुगतान तिथि: {t.dueDate})</span>
+                                              </div>
+                                            )}
+                                          </div>
+
+                                          {/* Audit Log / Edit Logs */}
+                                          {t.editLogs && t.editLogs.length > 0 && (
+                                            <div className="bg-amber-50/70 border border-amber-200 p-2 rounded-xl text-[8px] font-sans text-amber-950 space-y-1">
+                                              <div className="font-black text-amber-950 flex items-center">
+                                                <span>✏️ संशोधन इतिहास (Audit Log):</span>
+                                              </div>
+                                              {t.editLogs.map((log: any, idx: number) => (
+                                                <div key={idx} className="leading-normal border-l-2 border-amber-300 pl-1.5 ml-1 my-0.5">
+                                                  ऑपरेटर <strong>{log.operator || "ऑपरेटर"}</strong> द्वारा {log.timestamp ? new Date(log.timestamp).toLocaleString("hi-IN") : ""} को संशोधित किया गया:<br/>
+                                                  <span className="italic text-slate-700 font-medium">({log.changedText})</span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+
+                                          {/* Action Buttons for sub-transaction */}
+                                          <div className="flex justify-end space-x-3 pt-1.5 border-t border-slate-100 text-[9px]">
+                                            <button
+                                              type="button"
+                                              onClick={() => setViewingTransaction(t)}
+                                              className="text-blue-650 hover:text-blue-900 font-extrabold cursor-pointer bg-blue-50 px-2 py-0.5 rounded"
+                                            >
+                                              📖 पर्ची विवरण
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setEditingTransactionId(t.id);
+                                                const netW = Math.max(1, Number(t.grossWeight || 0) - Number(t.deductKg || 0));
+                                                const computedRate = t.rateType === "kg" ? (t.amount / netW) : ((t.amount * 100) / netW);
+                                                const finalPrefillRate = t.ratePerQuintal !== undefined && t.ratePerQuintal !== null ? t.ratePerQuintal : computedRate;
+                                                setIncomeForm({
+                                                  farmerId: t.farmerId || "",
+                                                  farmId: t.farmId || "",
+                                                  crop: t.crop || "",
+                                                  amount: String(t.isMandiSale ? Math.round(Number(finalPrefillRate)) : t.amount),
+                                                  category: t.category || "crop_sale",
+                                                  date: t.date || new Date().toISOString().split("T")[0],
+                                                  isMandiSale: !!t.isMandiSale,
+                                                  grossWeight: t.grossWeight ? String(t.grossWeight) : "",
+                                                  deductKg: t.deductKg ? String(t.deductKg) : "0",
+                                                  rateType: t.rateType || "quintal",
+                                                  deductionRate: String(t.deductionRate || "2"),
+                                                  traderName: t.traderName || "",
+                                                  isCreditSale: !!t.isCreditSale,
+                                                  dueDate: t.dueDate || "",
+                                                  pendingAmount: t.pendingAmount ? String(t.pendingAmount) : "",
+                                                  traderSelectMode: "existing",
+                                                  tempTraderName: "",
+                                                  tempTraderPhone: "",
+                                                  paymentStatus: t.paymentStatus || "paid"
+                                                });
+                                                setShowAddForm(true);
+                                              }}
+                                              className="text-indigo-650 hover:text-indigo-850 font-black cursor-pointer bg-indigo-50 px-2 py-0.5 rounded transition-all"
+                                            >
+                                              संशोधन ✏️
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                showConfirm(
+                                                  "आय रिकॉर्ड हटाएं ⚠️",
+                                                  "क्या आप वाकई इस फसल बिक्री/आय रिकॉर्ड को हटाना चाहते हैं?",
+                                                  () => deleteTransaction(t.id)
+                                                );
+                                              }}
+                                              className="text-rose-650 hover:text-rose-800 font-extrabold cursor-pointer bg-rose-50 px-2 py-0.5 rounded"
+                                            >
+                                              हटाएं 🗑️
+                                            </button>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 )}
                               </div>
-
-                              <div className="flex justify-between border-t border-slate-100 pt-1.5 text-[9.5px]">
-                                <span className="text-slate-400 font-mono">दिनांक: {t.date}</span>
-                                <div className="flex items-center space-x-3">
-                                  <button onClick={() => {
-                                    setEditingTransactionId(t.id);
-                                    const netW = Math.max(1, Number(t.grossWeight || 0) - Number(t.deductKg || 0));
-                                    const computedRate = t.rateType === "kg" ? (t.amount / netW) : ((t.amount * 100) / netW);
-                                    setIncomeForm({
-                                      farmerId: t.farmerId || "",
-                                      farmId: t.farmId || "",
-                                      crop: t.crop || "",
-                                      amount: String(t.isMandiSale ? Math.round(computedRate) : t.amount),
-                                      category: t.category || "crop_sale",
-                                      date: t.date || new Date().toISOString().split("T")[0],
-                                      isMandiSale: !!t.isMandiSale,
-                                      grossWeight: t.grossWeight ? String(t.grossWeight) : "",
-                                      deductKg: t.deductKg ? String(t.deductKg) : "0",
-                                      rateType: t.rateType || "quintal",
-                                      deductionRate: String(t.deductionRate || "2"),
-                                      traderName: t.traderName || "",
-                                      isCreditSale: !!t.isCreditSale,
-                                      dueDate: t.dueDate || "",
-                                      pendingAmount: t.pendingAmount ? String(t.pendingAmount) : "",
-                                      traderSelectMode: "existing",
-                                      tempTraderName: "",
-                                      tempTraderPhone: "",
-                                      paymentStatus: t.paymentStatus || "paid"
-                                    });
-                                    setShowAddForm(true);
-                                  }} className="text-emerald-700 hover:text-emerald-955 font-bold cursor-pointer">
-                                    संपादित करें ✏️
-                                  </button>
-                                  <button onClick={() => {
-                                    showConfirm(
-                                      "आय रिकॉर्ड हटाएं ⚠️",
-                                      "क्या आप वाकई इस फसल बिक्री/आय रिकॉर्ड को हटाना चाहते हैं?",
-                                      () => deleteTransaction(t.id)
-                                    );
-                                  }} className="text-rose-650 hover:text-rose-800 font-bold cursor-pointer">
-                                    हटाएं 🗑️
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
+                            );
+                          });
+                        } else {
+                          return (
+                            <p className="text-[10.5px] text-slate-400 text-center py-12 italic">कोई फसल बिक्री / आय विवरण उपलब्ध नहीं है।</p>
                           );
-                        })
-                      ) : (
-                        <p className="text-[10.5px] text-slate-400 text-center py-12 italic">कोई फसल बिक्री / आय विवरण उपलब्ध नहीं है।</p>
-                      )}
+                        }
+                      })()}
                     </div>
                   )}
                 </>
@@ -2845,6 +3379,18 @@ export const AndroidDashboard: React.FC = () => {
                 <>
                   {showAddForm ? (
                     <form onSubmit={handleRegisterFertilizer} className="space-y-3.5 animate-fadeIn font-sans">
+                      {editingTransactionId && (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-[10px] text-amber-900 flex justify-between items-center font-sans">
+                          <span>✏️ <strong>संशोधन मोड:</strong> आप पुराने खाद खर्च विवरण में सुधार कर रहे हैं।</span>
+                          <button type="button" onClick={() => {
+                            setEditingTransactionId(null);
+                            setFertilizerForm({ farmerId: "", farmId: "", crop: "", fertilizerBrand: "", bagsCount: "2", costPerBag: "350", date: new Date().toISOString().split("T")[0] });
+                          }} className="text-[10px] text-rose-700 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-lg font-black hover:bg-rose-100 cursor-pointer">
+                            रद्द करें ✖️
+                          </button>
+                        </div>
+                      )}
+
                       <div className="p-3 bg-cyan-50 border border-cyan-200 rounded-2xl text-[10px] text-cyan-800 leading-normal">
                         📦 यूरिया, DAP, NPK इत्यादि खाद की बोरियों की संख्या एवं दर के अनुसार व्यय जोड़ने का विशेष प्रविष्टि प्रपत्र।
                       </div>
@@ -2997,7 +3543,7 @@ export const AndroidDashboard: React.FC = () => {
                       )}
 
                       <button type="submit" className="w-full py-3 bg-indigo-700 hover:bg-indigo-800 text-white font-black text-xs rounded-xl shadow cursor-pointer transition-all">
-                        💾 नया खाद खर्च दर्ज करें
+                        💾 {editingTransactionId ? "बदलाव सुरक्षित करें" : "नया खाद खर्च दर्ज करें"}
                       </button>
                     </form>
                   ) : (
@@ -3027,15 +3573,45 @@ export const AndroidDashboard: React.FC = () => {
 
                               <div className="flex justify-between border-t border-slate-100 pt-1.5 text-[9.5px]">
                                 <span className="text-slate-400 font-mono">व्यय तिथि: {t.date}</span>
-                                <button onClick={() => {
-                                  showConfirm(
-                                    "व्यय विवरण हटाएं ⚠️",
-                                    "क्या आप वाकई इस खाद खर्च विवरण को हटाना चाहते हैं? यह प्रक्रिया अपरिवर्तनीय है!",
-                                    () => deleteTransaction(t.id)
-                                  );
-                                }} className="text-rose-650 font-bold hover:text-rose-800 transition-all cursor-pointer">
-                                  हटाएं 🗑️
-                                </button>
+                                <div className="flex space-x-2">
+                                  <button onClick={() => {
+                                    setEditingTransactionId(t.id);
+                                    let brand = (t as any).fertilizerBrand || "";
+                                    let bags = String((t as any).bagsCount || "2");
+                                    let rate = String((t as any).costPerBag || "350");
+                                    if (!brand && t.voiceTranscription) {
+                                      const brandMatch = t.voiceTranscription.match(/खाद सामग्री:\s*(.*?),/);
+                                      const bagsMatch = t.voiceTranscription.match(/मात्रा:\s*(\d+)\s*बोरी/);
+                                      const rateMatch = t.voiceTranscription.match(/दर:\s*₹(\d+)\/बोरी/);
+                                      if (brandMatch) brand = brandMatch[1].trim();
+                                      if (bagsMatch) bags = String(bagsMatch[1]);
+                                      if (rateMatch) rate = String(rateMatch[1]);
+                                    }
+                                    setFertilizerForm({
+                                      farmerId: t.farmerId || "",
+                                      farmId: t.farmId || "",
+                                      crop: t.crop || "",
+                                      fertilizerBrand: brand || FERTILIZER_BRANDS[0],
+                                      bagsCount: bags,
+                                      costPerBag: rate,
+                                      date: t.date || new Date().toISOString().split("T")[0],
+                                      isCreditSale: !!t.isCreditSale,
+                                      dueDate: t.dueDate || ""
+                                    } as any);
+                                    setShowAddForm(true);
+                                  }} className="text-indigo-650 font-bold hover:text-indigo-800 transition-all cursor-pointer">
+                                    सुधारें ✏️
+                                  </button>
+                                  <button onClick={() => {
+                                    showConfirm(
+                                      "व्यय विवरण हटाएं ⚠️",
+                                      "क्या आप वाकई इस खाद खर्च विवरण को हटाना चाहते हैं? यह प्रक्रिया अपरिवर्तनीय है!",
+                                      () => deleteTransaction(t.id)
+                                    );
+                                  }} className="text-rose-650 font-bold hover:text-rose-800 transition-all cursor-pointer">
+                                    हटाएं 🗑️
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           );
@@ -3054,6 +3630,18 @@ export const AndroidDashboard: React.FC = () => {
                 <>
                   {showAddForm ? (
                     <form onSubmit={handleRegisterSeed} className="space-y-3.5 animate-fadeIn font-sans">
+                      {editingTransactionId && (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-[10px] text-amber-900 flex justify-between items-center font-sans">
+                          <span>✏️ <strong>संशोधन मोड:</strong> आप पुराने बीज उपयोग खाता विवरण में सुधार कर रहे हैं।</span>
+                          <button type="button" onClick={() => {
+                            setEditingTransactionId(null);
+                            setSeedForm({ farmerId: "", farmId: "", crop: "", seedVariety: "", quantityKg: "40", cost: "1800", date: new Date().toISOString().split("T")[0] });
+                          }} className="text-[10px] text-rose-700 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-lg font-black hover:bg-rose-100 cursor-pointer">
+                            रद्द करें ✖️
+                          </button>
+                        </div>
+                      )}
+
                       <div className="p-3 bg-emerald-50 border border-emerald-250/60 rounded-2xl text-[10.5px] text-emerald-800">
                         🌱 फसल बोने हेतु बीज खरीद विवरण, उपजातियाँ एवं क्षेत्रानुसार बोया गया बीज वजन दर्ज करें।
                       </div>
@@ -3188,7 +3776,7 @@ export const AndroidDashboard: React.FC = () => {
                       </div>
 
                       <button type="submit" className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-xs rounded-xl shadow cursor-pointer transition-all">
-                        💾 नया बीज उपयोग खाता सुरक्षित करें
+                        💾 {editingTransactionId ? "बदलाव सुरक्षित करें" : "नया बीज उपयोग खाता सुरक्षित करें"}
                       </button>
                     </form>
                   ) : (
@@ -3219,15 +3807,40 @@ export const AndroidDashboard: React.FC = () => {
 
                               <div className="flex justify-between border-t border-slate-100 pt-1.5 text-[9.5px]">
                                 <span className="text-slate-400 font-mono">दिनांक: {t.date}</span>
-                                <button onClick={() => {
-                                  showConfirm(
-                                    "विवरण हटाएं ⚠️",
-                                    "क्या आप वाकई इस बीज बोवाई व्यय विवरण को हटाना चाहते हैं?",
-                                    () => deleteTransaction(t.id)
-                                  );
-                                }} className="text-rose-650 hover:text-rose-800 block scale-95 font-bold cursor-pointer">
-                                  हटाएं 🗑️
-                                </button>
+                                <div className="flex space-x-2">
+                                  <button onClick={() => {
+                                    setEditingTransactionId(t.id);
+                                    let variety = (t as any).seedVariety || "";
+                                    let qty = String((t as any).quantityKg || "40");
+                                    if (!variety && t.voiceTranscription) {
+                                      const varMatch = t.voiceTranscription.match(/बीज प्रविष्टि:\s*(.*?),/);
+                                      const qtyMatch = t.voiceTranscription.match(/वज़न:\s*([\d.]+)\s*कि.ग्रा./);
+                                      if (varMatch) variety = varMatch[1].trim();
+                                      if (qtyMatch) qty = String(qtyMatch[1]);
+                                    }
+                                    setSeedForm({
+                                      farmerId: t.farmerId || "",
+                                      farmId: t.farmId || "",
+                                      crop: t.crop || "",
+                                      seedVariety: variety || SEED_VARIETIES[0],
+                                      quantityKg: qty,
+                                      cost: String(t.amount || ""),
+                                      date: t.date || new Date().toISOString().split("T")[0]
+                                    });
+                                    setShowAddForm(true);
+                                  }} className="text-indigo-650 font-bold hover:text-indigo-800 transition-all cursor-pointer">
+                                    सुधारें ✏️
+                                  </button>
+                                  <button onClick={() => {
+                                    showConfirm(
+                                      "विवरण हटाएं ⚠️",
+                                      "क्या आप वाकई इस बीज बोवाई व्यय विवरण को हटाना चाहते हैं?",
+                                      () => deleteTransaction(t.id)
+                                    );
+                                  }} className="text-rose-650 hover:text-rose-800 block scale-95 font-bold cursor-pointer">
+                                    हटाएं 🗑️
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           );
@@ -3245,6 +3858,18 @@ export const AndroidDashboard: React.FC = () => {
                 <>
                   {showAddForm ? (
                     <form onSubmit={handleRegisterPesticide} className="space-y-3.5 animate-fadeIn font-sans">
+                      {editingTransactionId && (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-[10px] text-amber-900 flex justify-between items-center font-sans">
+                          <span>✏️ <strong>संशोधन मोड:</strong> आप पुराने दवा / कीटनाशक छिड़काव विवरण में सुधार कर रहे हैं।</span>
+                          <button type="button" onClick={() => {
+                            setEditingTransactionId(null);
+                            setPesticideForm({ farmerId: "", farmId: "", crop: "", productName: "", quantity: "1", cost: "950", date: new Date().toISOString().split("T")[0] });
+                          }} className="text-[10px] text-rose-700 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-lg font-black hover:bg-rose-100 cursor-pointer">
+                            रद्द करें ✖️
+                          </button>
+                        </div>
+                      )}
+
                       <div className="p-3 bg-teal-50 border border-teal-200 rounded-2xl text-[10px] text-teal-800">
                         💊 कीटनाशक, फफूंदनाशक, खरपतवार नाशक या फसल वर्धक दवाओं के छिड़काव अथवा खरीद का कुल व्यय लेखा-जोखा प्रविष्टि।
                       </div>
@@ -3345,7 +3970,7 @@ export const AndroidDashboard: React.FC = () => {
                       </div>
 
                       <button type="submit" className="w-full py-3 bg-teal-700 hover:bg-teal-800 text-white font-black text-xs rounded-xl shadow cursor-pointer transition-all">
-                        💾 नया दवा छिड़काव खर्चा दर्ज करें
+                        💾 {editingTransactionId ? "बदलाव सुरक्षित करें" : "नया दवा छिड़काव खर्चा दर्ज करें"}
                       </button>
                     </form>
                   ) : (
@@ -3376,15 +4001,40 @@ export const AndroidDashboard: React.FC = () => {
 
                               <div className="flex justify-between border-t border-slate-100 pt-1.5 text-[9.5px]">
                                 <span className="text-slate-400 font-mono">छिड़काव तिथि: {t.date}</span>
-                                <button onClick={() => {
-                                  showConfirm(
-                                    "लेनदेन हटाएं ⚠️",
-                                    "क्या आप वाकई इस कीटनाशक व्यय रिकॉर्ड को हटाना चाहते हैं?",
-                                    () => deleteTransaction(t.id)
-                                  );
-                                }} className="text-rose-650 hover:text-rose-800 scale-95 font-bold transition-all cursor-pointer">
-                                  हटाएं 🗑️
-                                </button>
+                                <div className="flex space-x-2">
+                                  <button onClick={() => {
+                                    setEditingTransactionId(t.id);
+                                    let prod = (t as any).productName || "";
+                                    let qty = String((t as any).quantity || "1");
+                                    if (!prod && t.voiceTranscription) {
+                                      const prodMatch = t.voiceTranscription.match(/दवा \/ कीटनाशक प्रविष्टि:\s*(.*?),/);
+                                      const qtyMatch = t.voiceTranscription.match(/उपयोग मात्रा:\s*([\d.]+)/);
+                                      if (prodMatch) prod = prodMatch[1].trim();
+                                      if (qtyMatch) qty = String(qtyMatch[1]);
+                                    }
+                                    setPesticideForm({
+                                      farmerId: t.farmerId || "",
+                                      farmId: t.farmId || "",
+                                      crop: t.crop || "",
+                                      productName: prod || PESTICIDE_PRODUCT[0],
+                                      quantity: qty,
+                                      cost: String(t.amount || ""),
+                                      date: t.date || new Date().toISOString().split("T")[0]
+                                    });
+                                    setShowAddForm(true);
+                                  }} className="text-indigo-650 font-bold hover:text-indigo-800 transition-all cursor-pointer">
+                                    सुधारें ✏️
+                                  </button>
+                                  <button onClick={() => {
+                                    showConfirm(
+                                      "लेनदेन हटाएं ⚠️",
+                                      "क्या आप वाकई इस कीटनाशक व्यय रिकॉर्ड को हटाना चाहते हैं?",
+                                      () => deleteTransaction(t.id)
+                                    );
+                                  }} className="text-rose-650 hover:text-rose-800 scale-95 font-bold transition-all cursor-pointer">
+                                    हटाएं 🗑️
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           );
@@ -3402,6 +4052,18 @@ export const AndroidDashboard: React.FC = () => {
                 <>
                   {showAddForm ? (
                     <form onSubmit={handleRegisterLabor} className="space-y-3.5 animate-fadeIn font-sans">
+                      {editingTransactionId && (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-[10px] text-amber-900 flex justify-between items-center font-sans">
+                          <span>✏️ <strong>संशोधन मोड:</strong> आप पुराने लेबर हाजिरी / बकाया का विवरण सुधार रहे हैं।</span>
+                          <button type="button" onClick={() => {
+                            setEditingTransactionId(null);
+                            setLaborFormState({ farmerId: "", farmId: "", crop: "", mode: "individual", laborerName: "", attendance: "present", workersCount: "5", groupName: "", workDescription: "", contractAmount: "", advancePaid: "", date: new Date().toISOString().split("T")[0] });
+                          }} className="text-[10px] text-rose-700 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-lg font-black hover:bg-rose-100 cursor-pointer">
+                            रद्द करें ✖️
+                          </button>
+                        </div>
+                      )}
+
                       <div className="p-3 bg-violet-50 border border-violet-200 rounded-2xl text-[10px] text-violet-800 leading-normal">
                         👥 मजदूरों की हाजिरी, ठेकेदार बल्क टोली बुकिंग, तय मजदूरी एवं एडवांस भुगतान की सरल सुरक्षा ट्रैकिंग प्रविष्टि।
                       </div>
@@ -3570,7 +4232,7 @@ export const AndroidDashboard: React.FC = () => {
                       </div>
 
                       <button type="submit" className="w-full py-3 bg-violet-750 bg-violet-700 hover:bg-violet-850 text-white font-black text-xs rounded-xl shadow cursor-pointer transition-all">
-                        💾 लेबर हाजिरी प्रविष्टि सुरक्षित करें
+                        💾 {editingTransactionId ? "बदलाव सुरक्षित करें" : "लेबर हाजिरी प्रविष्टि सुरक्षित करें"}
                       </button>
                     </form>
                   ) : (
@@ -3614,15 +4276,37 @@ export const AndroidDashboard: React.FC = () => {
                                   दिनांक: {lab.date} | फसल: {lab.crop}
                                   {lab.farmId && ` | खेत: ${lab.farmId.split(",").map(id => allPlots.find(p => p.id === id)?.name || id).join(", ")}`}
                                 </span>
-                                <button onClick={() => {
-                                  showConfirm(
-                                    "हाजिरी रिकॉर्ड हटाएं ⚠️",
-                                    "क्या आप वाकई इस लेबर हाजिरी / कार्य रिकॉर्ड को हटाना चाहते हैं?",
-                                    () => deleteLabor(lab.id)
-                                  );
-                                }} className="text-rose-600 font-bold block scale-95 hover:text-rose-800 cursor-pointer">
-                                  हटाएं 🗑️
-                                </button>
+                                <div className="flex space-x-2">
+                                  <button onClick={() => {
+                                    setEditingTransactionId(lab.id);
+                                    setLaborFormState({
+                                      farmerId: lab.farmerId || "",
+                                      farmId: lab.farmId || "",
+                                      crop: lab.crop || "",
+                                      mode: lab.mode || "individual",
+                                      laborerName: lab.laborerName || "",
+                                      attendance: lab.attendance || "present",
+                                      workersCount: String(lab.workersCount || "5"),
+                                      groupName: lab.groupName || "",
+                                      workDescription: lab.workDescription || "",
+                                      contractAmount: String(lab.contractAmount || ""),
+                                      advancePaid: String(lab.advancePaid || ""),
+                                      date: lab.date || new Date().toISOString().split("T")[0]
+                                    });
+                                    setShowAddForm(true);
+                                  }} className="text-indigo-650 font-bold hover:text-indigo-800 transition-all cursor-pointer">
+                                    सुधारें ✏️
+                                  </button>
+                                  <button onClick={() => {
+                                    showConfirm(
+                                      "हाजिरी रिकॉर्ड हटाएं ⚠️",
+                                      "क्या आप वाकई इस लेबर हाजिरी / कार्य रिकॉर्ड को हटाना चाहते हैं?",
+                                      () => deleteLabor(lab.id)
+                                    );
+                                  }} className="text-rose-600 font-bold block scale-95 hover:text-rose-800 cursor-pointer">
+                                    हटाएं 🗑️
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           );
@@ -3910,7 +4594,7 @@ export const AndroidDashboard: React.FC = () => {
                   <div className="p-4 bg-gradient-to-r from-amber-500 to-amber-600 rounded-2.5xl text-white shadow relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
                     <h3 className="text-sm font-black flex items-center space-x-2">
-                       <span>📦 रीयल-टाइम स्टॉक प्रबंधन</span>
+                       <span>📦 स्टॉक जोड़ें</span>
                     </h3>
                     <p className="text-[10px] text-amber-50 mt-1 font-sans leading-relaxed">
                       यहाँ से खाद, बीज और कीटनाशकों के स्टॉक की निगरानी करें। किसी भी आइटम की कमी होने पर उसे तुरंत रीफिल करें।
@@ -3957,15 +4641,17 @@ export const AndroidDashboard: React.FC = () => {
                       </div>
 
                       {/* Add New Stock Item form */}
-                      <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-2.5xl space-y-3">
-                        <div className="flex justify-between items-center bg-amber-50 p-2 rounded-xl border border-amber-100">
-                          <strong className="text-xs text-amber-900">➕ {selectedStockToRefill === "new" ? "नया स्टॉक आइटम जोड़ें" : "मौजूदा स्टॉक में मात्रा जोड़ें (Refill)"}</strong>
+                      <div className="bg-slate-50 border border-slate-200 p-4 rounded-2.5xl space-y-4 shadow-sm animate-fadeIn">
+                        <div className="flex justify-between items-center bg-amber-50 p-2.5 rounded-xl border border-amber-100">
+                          <strong className="text-xs text-amber-900 flex items-center space-x-1">
+                            <span>➕ {selectedStockToRefill === "new" ? "नए स्टॉक आइटम का पंजीकरण" : "मौजूदा स्टॉक में बढ़ोतरी (Refill)"}</span>
+                          </strong>
                         </div>
 
-                        {/* Existing stock item dropdown selector */}
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-slate-650 block font-sans">
-                            स्टॉक प्रविष्टि प्रकार (Entry Type / Select Item)
+                        {/* Dropdown selector for entry type: New or Refill */}
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-700 block select-none">
+                            🔄 कार्य चुनें (Select Action Mode)
                           </label>
                           <select
                             value={selectedStockToRefill}
@@ -3980,7 +4666,8 @@ export const AndroidDashboard: React.FC = () => {
                                     name: found.name,
                                     quantity: "",
                                     unit: found.unit,
-                                    company: found.company
+                                    company: found.company,
+                                    pricePerUnit: String(found.pricePerUnit || "")
                                   });
                                 }
                               } else {
@@ -3988,14 +4675,17 @@ export const AndroidDashboard: React.FC = () => {
                                   type: "fertilizer",
                                   name: "",
                                   quantity: "",
-                                  unit: "बोरी",
-                                  company: ""
+                                  unit: "कि.ग्राम",
+                                  company: "",
+                                  pricePerUnit: ""
                                 });
+                                setStockSelectedRegisteredId("");
+                                setStockVarietyInput("");
                               }
                             }}
-                            className="w-full p-2.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-800 focus:ring-1 focus:ring-amber-500 font-sans outline-none leading-none"
+                            className="w-full p-2.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-800 focus:ring-1 focus:ring-amber-500 font-sans outline-none font-bold shadow-sm"
                           >
-                            <option value="new">🆕 -- नया स्टॉक आइटम दर्ज करें --</option>
+                            <option value="new">🆕 -- नया स्टॉक आइटम जोड़ें / पंजीकृत करें --</option>
                             {stockList.map(s => (
                               <option key={s.id} value={s.id}>
                                 {s.type === "fertilizer" ? "🍁 खाद: " : s.type === "seed" ? "🌱 बीज: " : "💊 दवा: "} 
@@ -4005,183 +4695,410 @@ export const AndroidDashboard: React.FC = () => {
                           </select>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-slate-650 block">आइटम का नाम</label>
-                            <input
-                              type="text"
-                              placeholder="जैसे: यूरिया (Urea)"
-                              value={stockFormState.name}
-                              onChange={(e) => setStockFormState(prev => ({ ...prev, name: e.target.value }))}
-                              disabled={selectedStockToRefill !== "new"}
-                              className={`w-full p-2 border border-slate-200 rounded-lg text-xs font-sans ${selectedStockToRefill !== "new" ? "bg-slate-100 text-slate-500 cursor-not-allowed" : "bg-white text-slate-800"}`}
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-slate-650 block">कैटेगरी</label>
-                            <select
-                              value={stockFormState.type}
-                              onChange={(e) => {
-                                const val = e.target.value as any;
-                                setStockFormState(prev => ({ 
-                                  ...prev, 
-                                  type: val,
-                                  unit: val === "fertilizer" ? "कि.ग्राम" : (val === "seed" ? "कि.ग्राम" : "लीटर")
-                                }));
-                              }}
-                              disabled={selectedStockToRefill !== "new"}
-                              className={`w-full p-2 border border-slate-200 rounded-lg text-xs bg-white font-sans ${selectedStockToRefill !== "new" ? "bg-slate-100 text-slate-500 cursor-not-allowed" : "bg-white text-slate-800"}`}
-                            >
-                              <option value="fertilizer">खाद (Fertilizer)</option>
-                              <option value="seed">बीज (Seed)</option>
-                              <option value="pesticide">कीटनाशक (Pesticide)</option>
-                            </select>
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-slate-650 block">
-                              {selectedStockToRefill === "new" ? "प्रारंभिक मात्रा" : "जोड़ने वाली मात्रा (+)"}
-                            </label>
-                            <input
-                              type="number"
-                              placeholder="0"
-                              value={stockFormState.quantity}
-                              onChange={(e) => setStockFormState(prev => ({ ...prev, quantity: e.target.value }))}
-                              className="w-full p-2 border border-slate-200 rounded-lg text-xs font-sans text-slate-800 bg-white"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-slate-650 block font-sans">मात्रा इकाई</label>
-                            <select
-                              value={stockFormState.unit}
-                              onChange={(e) => setStockFormState(prev => ({ ...prev, unit: e.target.value }))}
-                              disabled={selectedStockToRefill !== "new"}
-                              className={`w-full p-2 border border-slate-200 rounded-lg text-xs bg-white font-sans ${selectedStockToRefill !== "new" ? "bg-slate-100 text-slate-500" : "bg-white text-slate-800"}`}
-                            >
-                              {stockFormState.type === "fertilizer" && (
-                                <>
-                                  <option value="कि.ग्राम">कि.ग्राम</option>
-                                  <option value="बोरी">बोरी</option>
-                                  <option value="ग्राम">ग्राम</option>
-                                </>
-                              )}
-                              {stockFormState.type === "seed" && (
-                                <>
-                                  <option value="कि.ग्राम">कि.ग्राम</option>
-                                  <option value="ग्राम">ग्राम</option>
-                                </>
-                              )}
-                              {stockFormState.type === "pesticide" && (
-                                <>
-                                  <option value="लीटर">लीटर</option>
-                                  <option value="मिलीलीटर">मिलीलीटर</option>
-                                  <option value="ग्राम">ग्राम</option>
-                                  <option value="कि.ग्राम">कि.ग्राम</option>
-                                </>
-                              )}
-                            </select>
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-slate-650 block">मूल्य / कीमत (₹ प्रति इकाई)</label>
-                            <input
-                              type="number"
-                              placeholder="जैसे: 350"
-                              value={stockFormState.pricePerUnit}
-                              onChange={(e) => setStockFormState(prev => ({ ...prev, pricePerUnit: e.target.value }))}
-                              disabled={selectedStockToRefill !== "new"}
-                              className={`w-full p-2 border border-slate-200 rounded-lg text-xs font-sans ${selectedStockToRefill !== "new" ? "bg-slate-100 text-slate-500 cursor-not-allowed" : "bg-white text-slate-800"}`}
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-slate-650 block">निर्माता कंपनी</label>
-                            <input
-                              type="text"
-                              placeholder="जैसे: इफको (IFFCO)"
-                              value={stockFormState.company}
-                              onChange={(e) => setStockFormState(prev => ({ ...prev, company: e.target.value }))}
-                              disabled={selectedStockToRefill !== "new"}
-                              className={`w-full p-2 border border-slate-200 rounded-lg text-xs font-sans ${selectedStockToRefill !== "new" ? "bg-slate-100 text-slate-500 cursor-not-allowed" : "bg-white text-slate-800"}`}
-                            />
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const numQty = Number(stockFormState.quantity || 0);
-                            if (numQty <= 0) {
-                              alert("❌ कृपया सही और वैध प्रविष्टि संख्या दर्ज करें!");
-                              return;
-                            }
+                        {/* === MODE A: NEW STOCK ITEM REGISTRATION === */}
+                        {selectedStockToRefill === "new" && (
+                          <div className="bg-amber-50/20 p-3.5 rounded-2xl border border-amber-100/60 space-y-3.5">
+                            {/* 1. Category selector & Pre-registered Item Dropdown */}
+                            <div className="grid grid-cols-2 gap-3">
+                              {/* Category selection */}
+                              <div className="space-y-1">
+                                <label className="text-[10.5px] font-black text-amber-800 block">
+                                  ❓ किस श्रेणी में जोड़ें? (Category)
+                                </label>
+                                <select
+                                  value={stockFormState.type}
+                                  onChange={(e) => {
+                                    const val = e.target.value as any;
+                                    setStockFormState(prev => ({ 
+                                      ...prev, 
+                                      type: val,
+                                      name: "",
+                                      company: "",
+                                      unit: val === "fertilizer" ? "कि.ग्राम" : (val === "seed" ? "कि.ग्राम" : "लीटर")
+                                    }));
+                                    setStockSelectedRegisteredId("");
+                                    setStockVarietyInput("");
+                                  }}
+                                  className="w-full p-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-800 focus:ring-1 focus:ring-amber-500 font-sans outline-none leading-none font-bold"
+                                >
+                                  <option value="fertilizer">🍁 खाद (Fertilizer)</option>
+                                  <option value="pesticide">💊 दवा / कीटनाशक (Pesticide)</option>
+                                  <option value="seed">🌱 बीज (Seed)</option>
+                                </select>
+                              </div>
 
-                            if (selectedStockToRefill !== "new") {
-                              setStockList(prev => prev.map(s => {
-                                if (s.id === selectedStockToRefill) {
-                                  const finalQty = s.quantity + numQty;
-                                  const log = {
-                                    id: "hist_" + Date.now(),
-                                    action: "refill" as const,
-                                    quantityChange: numQty,
-                                    finalQuantity: finalQty,
-                                    operatorName: currentUser?.name || "मुख्य यूजर",
-                                    date: new Date().toISOString(),
-                                    details: `स्टॉक बढ़ाया गया: +${numQty} ${s.unit} जोड़ा गया।`
-                                  };
-                                  const updatedHistory = s.history ? [log, ...s.history] : [log];
-                                  return { 
-                                    ...s, 
-                                    quantity: finalQty, 
-                                    history: updatedHistory, 
-                                    updatedAt: new Date().toISOString() 
-                                  };
+                              {/* Pre-registered Item Dropdown */}
+                              <div className="space-y-1">
+                                <label className="text-[10.5px] font-black text-amber-800 block">
+                                  📋 प्रोफाइल से आइटम चुनें
+                                </label>
+                                <select
+                                  value={stockSelectedRegisteredId}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setStockSelectedRegisteredId(val);
+                                    if (val === "ADD_NEW") {
+                                      setStockFormState(prev => ({ ...prev, name: "", company: "" }));
+                                      setStockVarietyInput("");
+                                    } else if (val === "") {
+                                      setStockFormState(prev => ({ ...prev, name: "", company: "" }));
+                                      setStockVarietyInput("");
+                                    } else {
+                                      // Copy matching registered brand attributes to stockFormState
+                                      if (stockFormState.type === "fertilizer") {
+                                        const f = registeredFertilizers.find(item => item.id === val);
+                                        if (f) {
+                                          setStockFormState(prev => ({ ...prev, name: f.name, company: f.company }));
+                                        }
+                                      } else if (stockFormState.type === "pesticide") {
+                                        const p = registeredPesticides.find(item => item.id === val);
+                                        if (p) {
+                                          setStockFormState(prev => ({ ...prev, name: p.name, company: p.company }));
+                                        }
+                                      } else if (stockFormState.type === "seed") {
+                                        const c = registeredCrops.find(item => item.id === val);
+                                        if (c) {
+                                          setStockFormState(prev => ({ ...prev, name: `${c.name} (${c.variety})`, company: c.company }));
+                                          setStockVarietyInput(c.variety);
+                                        }
+                                      }
+                                    }
+                                  }}
+                                  className="w-full p-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-800 focus:ring-1 focus:ring-amber-500 font-sans outline-none leading-none font-bold text-amber-900"
+                                >
+                                  <option value="">-- उपलब्ध ब्रांड चुनें --</option>
+                                  {stockFormState.type === "fertilizer" && registeredFertilizers.map(f => (
+                                    <option key={f.id} value={f.id}>🍁 {f.name} ({f.company})</option>
+                                  ))}
+                                  {stockFormState.type === "pesticide" && registeredPesticides.map(p => (
+                                    <option key={p.id} value={p.id}>💊 {p.name} ({p.company})</option>
+                                  ))}
+                                  {stockFormState.type === "seed" && registeredCrops.map(c => (
+                                    <option key={c.id} value={c.id}>🌱 {c.name} - किस्म: {c.variety} ({c.company})</option>
+                                  ))}
+                                  <option value="ADD_NEW" className="text-amber-700 font-black bg-amber-50">➕ नया सूचीबद्ध / पंजीकृत करें...</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            {/* Programmatic sub-form for dynamic entry creation */}
+                            {stockSelectedRegisteredId === "ADD_NEW" ? (
+                              <div className="p-3 bg-white border border-amber-200/80 rounded-2xl space-y-3 shadow-inner animate-fadeIn">
+                                <div className="text-[10px] text-amber-800 font-black flex items-center space-x-1">
+                                  <span>🚀 नया ब्रांड पंजीकरण (New Brand Registration)</span>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="space-y-1">
+                                    <label className="text-[9.5px] font-bold text-slate-655 block">आइटम का नाम</label>
+                                    <input
+                                      type="text"
+                                      placeholder="यूरिया, कोराजन, सोयाबीन आदि"
+                                      value={stockFormState.name}
+                                      onChange={(e) => setStockFormState(prev => ({ ...prev, name: e.target.value }))}
+                                      className="w-full p-2 border border-slate-200 rounded-lg text-[11px] font-sans bg-slate-50 text-slate-800 focus:bg-white"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[9.5px] font-bold text-slate-655 block">निर्माता / कंपनी</label>
+                                    <input
+                                      type="text"
+                                      placeholder="IFFCO, सिनजेंटा, महाबीज आदि"
+                                      value={stockFormState.company}
+                                      onChange={(e) => setStockFormState(prev => ({ ...prev, company: e.target.value }))}
+                                      className="w-full p-2 border border-slate-200 rounded-lg text-[11px] font-sans bg-slate-50 text-slate-800 focus:bg-white"
+                                    />
+                                  </div>
+                                </div>
+
+                                {stockFormState.type === "seed" && (
+                                  <div className="space-y-1">
+                                    <label className="text-[9.5px] font-bold text-slate-655 block">बीज किस्म / वैरायटी (Variety)</label>
+                                    <input
+                                      type="text"
+                                      placeholder="जैसे: JS-9560, अमरेटा आदि"
+                                      value={stockVarietyInput}
+                                      onChange={(e) => setStockVarietyInput(e.target.value)}
+                                      className="w-full p-2 border border-slate-200 rounded-lg text-[11px] font-sans bg-slate-50 text-slate-800 focus:bg-white"
+                                    />
+                                  </div>
+                                )}
+
+                                {stockFormState.type === "fertilizer" && (
+                                  <div className="space-y-1">
+                                    <label className="text-[9.5px] font-bold text-slate-655 block">बोरी क्षमता / वजन (कि.ग्राम / Bag Weight in KG)</label>
+                                    <input
+                                      type="number"
+                                      placeholder="उदा: 50"
+                                      value={stockFormState.bagWeight || "50"}
+                                      onChange={(e) => setStockFormState(prev => ({ ...prev, bagWeight: e.target.value }))}
+                                      className="w-full p-2 border border-slate-200 rounded-lg text-[11px] font-sans bg-slate-50 text-slate-800 focus:bg-white"
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            ) : null}
+
+                            {/* Quantitative and Pricing Inputs */}
+                            <div className="grid grid-cols-3 gap-2 pt-1 border-t border-amber-100/40 font-sans">
+                              <div className="space-y-1">
+                                <label className="text-[9.5px] font-extrabold text-slate-700 block">प्रारंभिक स्टॉक</label>
+                                <input
+                                  type="number"
+                                  placeholder="0"
+                                  value={stockFormState.quantity}
+                                  onChange={(e) => setStockFormState(prev => ({ ...prev, quantity: e.target.value }))}
+                                  className="w-full p-2 border border-slate-200 rounded-lg text-xs font-sans text-slate-800 bg-white"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[9.5px] font-extrabold text-slate-700 block font-sans">मात्रा इकाई</label>
+                                <select
+                                  value={stockFormState.unit}
+                                  onChange={(e) => setStockFormState(prev => ({ ...prev, unit: e.target.value }))}
+                                  className="w-full p-2 border border-slate-200 rounded-lg text-xs bg-white text-slate-800 font-sans font-bold"
+                                >
+                                  {stockFormState.type === "fertilizer" && (
+                                    <>
+                                      <option value="कि.ग्राम">कि.ग्राम</option>
+                                      <option value="बोरी">बोरी</option>
+                                    </>
+                                  )}
+                                  {stockFormState.type === "pesticide" && (
+                                    <>
+                                      <option value="लीटर">लीटर</option>
+                                      <option value="मि.ली.">मि.ली.</option>
+                                      <option value="कि.ग्राम">कि.ग्राम</option>
+                                      <option value="ग्राम">ग्राम</option>
+                                    </>
+                                  )}
+                                  {stockFormState.type === "seed" && (
+                                    <>
+                                      <option value="कि.ग्राम">कि.ग्राम</option>
+                                      <option value="क्विंटल">क्विंटल</option>
+                                      <option value="पैकेट">पैकेट</option>
+                                    </>
+                                  )}
+                                </select>
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[9.5px] font-extrabold text-slate-700 block text-right font-sans">मूल्य (प्रति इकाई)</label>
+                                <input
+                                  type="number"
+                                  placeholder="0"
+                                  value={stockFormState.pricePerUnit}
+                                  onChange={(e) => setStockFormState(prev => ({ ...prev, pricePerUnit: e.target.value }))}
+                                  className="w-full p-2 border border-slate-200 rounded-lg text-xs font-sans text-slate-800 bg-white text-right font-bold"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Submit Stock button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (stockSelectedRegisteredId === "ADD_NEW") {
+                                  if (!stockFormState.name || !stockFormState.company) {
+                                    alert("❌ कृपया नया नाम और निर्माता कंपनी दर्ज करें!");
+                                    return;
+                                  }
+                                } else if (!stockFormState.name) {
+                                  alert("❌ कृपया एक आइटम चुनें या नया दर्ज करें!");
+                                  return;
                                 }
-                                return s;
-                              }));
-                              logAudit("UPDATE_STOCK_ITEM", selectedStockToRefill, "farmers", `स्टॉक आइटम मात्रा बढ़ी: ${stockFormState.name}, जोड़ा: ${numQty} ${stockFormState.unit}`);
-                              setSelectedStockToRefill("new");
-                              alert("✅ मौजूदा स्टॉक में मात्रा सफलतापूर्वक जोड़ दी गई!");
-                            } else {
-                              if (!stockFormState.name) {
-                                alert("❌ कृपया नए स्टॉक आइटम का नाम दर्ज करें!");
-                                return;
-                              }
-                              const id = "stock_" + Date.now();
-                              const log = {
-                                id: "hist_" + Date.now(),
-                                action: "create" as const,
-                                quantityChange: numQty,
-                                finalQuantity: numQty,
-                                operatorName: currentUser?.name || "मुख्य यूजर",
-                                date: new Date().toISOString(),
-                                details: `${numQty} ${stockFormState.unit} प्रारंभिक मात्रा के साथ नया स्टॉक आइटम बनाया गया।`
-                              };
-                              const newItem = {
-                                id,
-                                type: stockFormState.type,
-                                name: stockFormState.name,
-                                quantity: numQty,
-                                unit: stockFormState.unit || "कि.ग्राम",
-                                pricePerUnit: Number(stockFormState.pricePerUnit) || 0,
-                                company: stockFormState.company || "देशी",
-                                updatedAt: new Date().toISOString(),
-                                history: [log]
-                              };
-                              setStockList(prev => [...prev, newItem]);
-                              logAudit("CREATE_STOCK_ITEM", id, "farmers", `नया स्टॉक आइटम जोड़ा: ${newItem.name}, मात्रा: ${newItem.quantity} ${newItem.unit}, मूल्य: ₹${newItem.pricePerUnit}/${newItem.unit}`);
-                              alert("✅ नया स्टॉक आइटम सफलता पूर्वक जोड़ा गया!");
-                            }
 
-                            setStockFormState({
-                              type: "fertilizer",
-                              name: "",
-                              quantity: "",
-                              unit: "कि.ग्राम",
-                              pricePerUnit: "",
-                              company: ""
-                            });
-                          }}
-                          className="w-full bg-amber-600 text-white font-sans py-2.5 rounded-xl font-black text-xs cursor-pointer hover:bg-amber-700 transition-all shadow"
-                        >
-                          {selectedStockToRefill === "new" ? "नया आइटम सुरक्षित करें" : "स्टॉक में मात्रा जोड़ें"}
-                        </button>
+                                const qty = Number(stockFormState.quantity) || 0;
+                                const rate = Number(stockFormState.pricePerUnit) || 0;
+
+                                // If registering a completely new brand on-the-fly, update the master profile lists
+                                if (stockSelectedRegisteredId === "ADD_NEW") {
+                                  const generatedId = "brand_" + Date.now();
+                                  if (stockFormState.type === "fertilizer") {
+                                    const newF = {
+                                      id: generatedId,
+                                      name: stockFormState.name,
+                                      company: stockFormState.company,
+                                      bagWeight: stockFormState.bagWeight || "50"
+                                    };
+                                    setRegisteredFertilizers(prev => [...prev, newF]);
+                                  } else if (stockFormState.type === "pesticide") {
+                                    const newP = {
+                                      id: generatedId,
+                                      name: stockFormState.name,
+                                      company: stockFormState.company
+                                    };
+                                    setRegisteredPesticides(prev => [...prev, newP]);
+                                  } else if (stockFormState.type === "seed") {
+                                    const newS = {
+                                      id: generatedId,
+                                      name: stockFormState.name.replace(/\s*\([^)]*\)/g, ""), // strip variety if parsed
+                                      variety: stockVarietyInput || "सामान्य",
+                                      company: stockFormState.company
+                                    };
+                                    setRegisteredCrops(prev => [...prev, newS]);
+                                  }
+                                }
+
+                                // Now add or refill inside stockList
+                                const existingIndex = stockList.findIndex(
+                                  s => s.name.toLowerCase() === stockFormState.name.toLowerCase() && 
+                                       s.company.toLowerCase() === stockFormState.company.toLowerCase() &&
+                                       s.type === stockFormState.type
+                                );
+
+                                if (existingIndex >= 0) {
+                                  // Update quantity
+                                  setStockList(prev => prev.map((s, idx) => {
+                                    if (idx === existingIndex) {
+                                      const oldQty = s.quantity;
+                                      const newTotal = oldQty + qty;
+                                      return {
+                                        ...s,
+                                        quantity: newTotal,
+                                        pricePerUnit: rate || s.pricePerUnit,
+                                        updatedAt: new Date().toISOString(),
+                                        editLogs: [
+                                          ...(s.editLogs || []),
+                                          {
+                                            operator: currentUser?.name || "ऑपरेटर",
+                                            timestamp: new Date().toISOString(),
+                                            changedText: `मात्रा बढ़ाई गयी: +${qty} ${stockFormState.unit} (कुल: ${newTotal})`
+                                          }
+                                        ]
+                                      };
+                                    }
+                                    return s;
+                                  }));
+                                  logAudit("REFILL_STOCK_ITEM", stockList[existingIndex].id, "farmers", `स्टॉक की मात्रा बढ़ाई: ${stockFormState.name} (+${qty})`);
+                                } else {
+                                  // Add new unique record
+                                  const newItem = {
+                                    id: "stock_" + Date.now(),
+                                    type: stockFormState.type,
+                                    name: stockFormState.name,
+                                    company: stockFormState.company,
+                                    quantity: qty,
+                                    unit: stockFormState.unit,
+                                    pricePerUnit: rate,
+                                    updatedAt: new Date().toISOString(),
+                                    editLogs: [
+                                      {
+                                        operator: currentUser?.name || "ऑपरेटर",
+                                        timestamp: new Date().toISOString(),
+                                        changedText: `प्रारंभिक स्टॉक पंजीकरण: ${qty} ${stockFormState.unit}, दर: ₹${rate}`
+                                      }
+                                    ]
+                                  };
+                                  setStockList(prev => [...prev, newItem]);
+                                  logAudit("REGISTER_STOCK_ITEM", newItem.id, "farmers", `नया स्टॉक पंजीकृत किया: ${newItem.name}, मात्रा: ${qty}`);
+                                }
+
+                                // Reset form inputs
+                                setStockFormState({
+                                  type: "fertilizer",
+                                  name: "",
+                                  quantity: "",
+                                  unit: "कि.ग्राम",
+                                  pricePerUnit: "",
+                                  company: "",
+                                  bagWeight: "50"
+                                });
+                                setStockSelectedRegisteredId("");
+                                setStockVarietyInput("");
+                                alert("✅ स्टॉक सफलतापूर्वक सुरक्षित हुआ!");
+                              }}
+                              className="w-full bg-amber-600 text-white font-sans py-2.5 rounded-xl font-black text-xs cursor-pointer hover:bg-amber-700 transition-all shadow"
+                            >
+                              नया आइटम सुरक्षित करें
+                            </button>
+                          </div>
+                        )}
+
+                        {/* MODE B: REFILL STOCK AMOUNT */}
+                        {selectedStockToRefill !== "new" && (
+                          <div className="bg-amber-50/10 p-3.5 rounded-2xl border border-amber-100/40 space-y-3 font-sans">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                <label className="text-[10px] text-amber-800 font-extrabold block">जोड़ी जाने वाली मात्रा *</label>
+                                <input
+                                  type="number"
+                                  placeholder="दर्ज करें"
+                                  value={stockFormState.quantity}
+                                  onChange={(e) => setStockFormState(prev => ({ ...prev, quantity: e.target.value }))}
+                                  className="w-full p-2 border border-slate-200 rounded-lg text-xs font-sans text-slate-800 bg-white"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[11px] text-slate-400 block pb-1">इकाई</label>
+                                <span className="text-xs text-slate-700 font-black block pt-1.5">{stockFormState.unit}</span>
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] text-amber-810 font-bold block">नई मूल्य / दर (₹ प्रति {stockFormState.unit}) *</label>
+                              <input
+                                type="number"
+                                placeholder="दर दर्ज करें"
+                                value={stockFormState.pricePerUnit}
+                                onChange={(e) => setStockFormState(prev => ({ ...prev, pricePerUnit: e.target.value }))}
+                                className="w-full p-2 border border-slate-200 rounded-lg text-xs font-sans text-slate-800 bg-white"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const qty = Number(stockFormState.quantity);
+                                if (!qty || qty <= 0) {
+                                  alert("❌ कृपया सही मात्रा दर्ज करें!");
+                                  return;
+                                }
+                                const rate = Number(stockFormState.pricePerUnit) || 0;
+                                const item = stockList.find(s => s.id === selectedStockToRefill);
+                                if (item) {
+                                  const oldQty = item.quantity;
+                                  const newTotal = oldQty + qty;
+                                  setStockList(prev => prev.map(s => {
+                                    if (s.id === item.id) {
+                                      return {
+                                        ...s,
+                                        quantity: newTotal,
+                                        pricePerUnit: rate || s.pricePerUnit,
+                                        updatedAt: new Date().toISOString(),
+                                        editLogs: [
+                                          ...(s.editLogs || []),
+                                          {
+                                            operator: currentUser?.name || "ऑपरेटर",
+                                            timestamp: new Date().toISOString(),
+                                            changedText: `स्टॉक मात्रा रीफिल किया: +${qty} ${s.unit} (कुल: ${newTotal})`
+                                          }
+                                        ]
+                                      };
+                                    }
+                                    return s;
+                                  }));
+                                  logAudit("REFILL_STOCK_ITEM", item.id, "farmers", `स्टॉक की मात्रा बढ़ाई (रीफिल): ${item.name} (+${qty})`);
+                                  
+                                  // Reset
+                                  setStockFormState({
+                                    type: "fertilizer",
+                                    name: "",
+                                    quantity: "",
+                                    unit: "कि.ग्राम",
+                                    pricePerUnit: "",
+                                    company: "",
+                                    bagWeight: "50"
+                                  });
+                                  setStockSelectedRegisteredId("");
+                                  setStockVarietyInput("");
+                                  setSelectedStockToRefill("new");
+                                  alert("✅ स्टॉक मात्रा सफलतापूर्वक जोड़ी गई!");
+                                }
+                              }}
+                              className="w-full bg-amber-600 text-white font-sans py-2.5 rounded-xl font-black text-xs cursor-pointer hover:bg-amber-700 transition-all shadow"
+                            >
+                              स्टॉक में मात्रा जोड़ें
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       {/* Stock Item Grid List */}
@@ -4198,18 +5115,35 @@ export const AndroidDashboard: React.FC = () => {
                                   </span>
                                   <strong className="text-xs text-slate-805 block mt-0.5">{item.name}</strong>
                                   <span className="text-[10px] text-slate-400 block mt-0.5 font-sans">
-                                    कंपनी: {item.company} | अंतिम अपडेट: {new Date(item.updatedAt).toLocaleTimeString()}
-                                    {item.pricePerUnit !== undefined && (
-                                      <span className="text-amber-700 font-extrabold ml-1.5 border-l border-slate-200 pl-1.5">
-                                        💰 दर: ₹{item.pricePerUnit}/{item.unit}
-                                      </span>
-                                    )}
+                                    कंपनी: {item.company} | अंतिम अपडेट: {new Date(item.updatedAt || "").toLocaleDateString("hi-IN")}
                                   </span>
                                 </div>
-                                <span className={`text-[13px] font-black font-sans leading-none ${item.quantity <= 5 ? "text-rose-600 animate-pulse font-extrabold" : "text-emerald-700"}`}>
-                                  {item.quantity} {item.unit}
-                                </span>
+
+                                <div className="text-right">
+                                  <span className="text-[9px] text-slate-400 block font-sans">स्टॉक मात्रा:</span>
+                                  <strong className={`text-sm font-black block ${Number(item.quantity) <= 5 ? "text-rose-600" : "text-slate-800"}`}>
+                                    {item.quantity} {item.unit}
+                                  </strong>
+                                  <span className="text-[9px] text-amber-700 font-extrabold block mt-0.5 font-sans">
+                                    ₹{item.pricePerUnit || 0}/{item.unit}
+                                  </span>
+                                </div>
                               </div>
+
+                              {/* Audit Log / Edit Logs */}
+                              {item.editLogs && item.editLogs.length > 0 && (
+                                <div className="bg-amber-50/70 border border-amber-200 p-2 rounded-xl text-[8px] font-sans text-amber-955 space-y-1">
+                                  <div className="font-black text-amber-950 flex items-center">
+                                    <span>✏️ संशोधन इतिहास (Audit Log):</span>
+                                  </div>
+                                  {item.editLogs.map((log: any, idx: number) => (
+                                    <div key={idx} className="leading-normal border-l-2 border-amber-300 pl-1.5 ml-1 my-0.5 font-sans">
+                                      ऑपरेटर <strong>{log.operator || "ऑपरेटर"}</strong> द्वारा {log.timestamp ? new Date(log.timestamp).toLocaleString("hi-IN") : ""} को संशोधित किया गया:<br/>
+                                      <span className="italic text-slate-700 font-medium">({log.changedText})</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
 
                               {/* Operations section underneath containing edit, delete, add quantity and detail history button */}
                               <div className="border-t border-slate-100 pt-2 flex flex-wrap gap-1 items-center justify-between">
@@ -4232,7 +5166,29 @@ export const AndroidDashboard: React.FC = () => {
                                     ➕ मात्रा जोड़ें
                                   </button>
                                   <button
-                                    onClick={() => setEditingStockItem(item)}
+                                    onClick={() => {
+                                      const isFertilizer = item.type === "fertilizer";
+                                      const defaultMode = isFertilizer ? "बोरी" : "सामान्य";
+                                      const bagW = isFertilizer ? getFertilizerBagWeight(item.name) : 1;
+                                      
+                                      setEditingStockItem({
+                                        ...item,
+                                        _originalName: item.name,
+                                        _originalCompany: item.company,
+                                        _originalQuantity: item.quantity,
+                                        _originalUnit: item.unit,
+                                        _originalPrice: item.pricePerUnit !== undefined ? item.pricePerUnit : 0
+                                      });
+                                      
+                                      setEditUnitMode(defaultMode);
+                                      if (isFertilizer) {
+                                        setDisplayQty(Number((item.quantity / bagW).toFixed(2)));
+                                        setDisplayPrice(Number(((item.pricePerUnit || 0) * bagW).toFixed(2)));
+                                      } else {
+                                        setDisplayQty(item.quantity);
+                                        setDisplayPrice(item.pricePerUnit || 0);
+                                      }
+                                    }}
                                     className="bg-slate-100 text-slate-700 hover:bg-slate-200 text-[9px] px-2 py-1 font-black rounded-lg cursor-pointer transition-all font-sans"
                                   >
                                     ✏️ एडिट (Edit)
@@ -4260,31 +5216,124 @@ export const AndroidDashboard: React.FC = () => {
                     </div>
                   ) : (
                     /* Category Report Visuals */
-                    <div className="space-y-4">
+                    <div className="space-y-4 animate-fadeIn">
                       {["fertilizer", "seed", "pesticide"].map((cat) => {
                         const items = stockList.filter(s => s.type === cat);
-                        const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
-                        const label = cat === "fertilizer" ? "🍁 खाद स्टॉक (Fertilizers)" : (cat === "seed" ? "🌱 बीज स्टॉक (Seeds)" : "💊 कीटनाशक स्टॉक (Pesticides)");
-                        const unit = cat === "fertilizer" ? "बोरी" : (cat === "seed" ? "कि.ग्राम." : "लीटर/इकाई");
+                        
+                        const getItemStats = (item: any) => {
+                          let rem = item.quantity;
+                          let tot = item.totalAdded !== undefined ? item.totalAdded : item.quantity;
+                          let unitName = item.unit || "इकाई";
+
+                          if (item.type === "fertilizer") {
+                            const bagWeight = getFertilizerBagWeight(item.name);
+                            if (item.unit === "बोरी") {
+                              rem = item.quantity * bagWeight;
+                              tot = tot * bagWeight;
+                            }
+                            unitName = "कि.ग्राम";
+                          } else if (item.type === "seed") {
+                            if (item.unit === "बोरी") {
+                              rem = item.quantity * 50; // default seed bag 50kg for legacy if any
+                              tot = tot * 50;
+                            }
+                            unitName = "कि.ग्रा.";
+                          }
+
+                          const used = Math.max(0, tot - rem);
+                          return { rem: Number(rem.toFixed(1)), tot: Number(tot.toFixed(1)), used: Number(used.toFixed(1)), unitName };
+                        };
+
+                        let sumTotalAdded = 0;
+                        let sumRemaining = 0;
+                        let sumUsed = 0;
+                        let displayUnit = cat === "fertilizer" ? "कि.ग्राम" : (cat === "seed" ? "कि.ग्राम" : "लीटर");
+
+                        items.forEach(item => {
+                          const stats = getItemStats(item);
+                          sumTotalAdded += stats.tot;
+                          sumRemaining += stats.rem;
+                          sumUsed += stats.used;
+                        });
+
+                        const label = cat === "fertilizer" ? "🍁 खाद/उर्वरक स्टॉक रिपोर्ट (Fertilizer Report)" : (cat === "seed" ? "🌱 बीज स्टॉक रिपोर्ट (Seeds Report)" : "💊 कीटनाशक स्टॉक रिपोर्ट (Pesticides Report)");
+                        
                         return (
-                          <div key={cat} className="p-4 bg-slate-50 border border-slate-200 rounded-3xl space-y-3 font-sans">
-                            <div className="flex justify-between items-center border-b border-slate-200 pb-1.5">
-                              <strong className="text-xs text-slate-800">{label}</strong>
-                              <span className="text-xs text-amber-600 font-extrabold">कुल: {totalQty} {unit}</span>
+                          <div key={cat} className="p-4 bg-slate-50 border border-slate-200 rounded-[24px] space-y-4 font-sans shadow-xs">
+                            <div className="flex justify-between items-center border-b border-slate-200/60 pb-2">
+                              <strong className="text-xs text-slate-800 flex items-center space-x-1.5">
+                                <span>{label}</span>
+                              </strong>
+                              <span className="text-[10px] bg-slate-100 text-slate-600 px-2.5 py-1 rounded-lg font-black">{items.length} आइटम</span>
                             </div>
+
+                            {/* Summary Grid for Total, Remaining, and Used */}
+                            <div className="grid grid-cols-3 gap-2">
+                              <div className="bg-slate-100/70 p-2 rounded-2xl text-center border border-slate-150">
+                                <span className="text-[8.5px] text-slate-550 font-black block uppercase">कुल मात्रा</span>
+                                <strong className="text-[11px] text-slate-800 font-black block mt-0.5">{sumTotalAdded.toFixed(1)} {displayUnit}</strong>
+                              </div>
+                              <div className="bg-emerald-50/75 p-2 rounded-2xl text-center border border-emerald-100">
+                                <span className="text-[8.5px] text-emerald-600 font-black block uppercase">शेष स्टॉक</span>
+                                <strong className="text-[11px] text-emerald-700 font-black block mt-0.5">{sumRemaining.toFixed(1)} {displayUnit}</strong>
+                              </div>
+                              <div className="bg-sky-50/70 p-2 rounded-2xl text-center border border-sky-100">
+                                <span className="text-[8.5px] text-sky-600 font-black block uppercase">कुल उपयोग</span>
+                                <strong className="text-[11px] text-sky-700 font-black block mt-0.5">{sumUsed.toFixed(1)} {displayUnit}</strong>
+                              </div>
+                            </div>
+
                             {items.length > 0 ? (
-                              <div className="space-y-1.5">
-                                {items.map(item => (
-                                  <div key={item.id} className="flex justify-between items-center text-[11px]">
-                                    <span className="text-slate-600">{item.name} ({item.company})</span>
-                                    <span className={`font-semibold ${item.quantity <= 5 ? "text-rose-650 font-extrabold" : "text-slate-800"}`}>
-                                      {item.quantity} {item.unit}
-                                    </span>
-                                  </div>
-                                ))}
+                              <div className="space-y-2.5 pt-1">
+                                {items.map(item => {
+                                  const stats = getItemStats(item);
+                                  const percentRem = stats.tot > 0 ? Math.min(100, Math.max(0, (stats.rem / stats.tot) * 100)) : 0;
+                                  
+                                  return (
+                                    <div key={item.id} className="bg-white border border-slate-150 p-3 rounded-2xl space-y-2">
+                                      <div className="flex justify-between items-start">
+                                        <div>
+                                          <strong className="text-[11.5px] text-slate-800 block">{item.name}</strong>
+                                          <span className="text-[9px] text-slate-400 block mt-0.5 font-sans">कंपनी: {item.company}</span>
+                                        </div>
+                                        <span className="text-[10px] text-slate-400 font-sans">
+                                          बचा: <strong className="text-emerald-700 font-black">{percentRem.toFixed(0)}%</strong>
+                                        </span>
+                                      </div>
+
+                                      {/* Mini Progress Bar */}
+                                      <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                        <div 
+                                          className={`h-full rounded-full transition-all duration-500 ${
+                                            percentRem <= 20 ? "bg-rose-500" : percentRem <= 50 ? "bg-amber-500" : "bg-emerald-500"
+                                          }`}
+                                          style={{ width: `${percentRem}%` }}
+                                        ></div>
+                                      </div>
+
+                                      {/* 3-Column Detailed Item Stat line */}
+                                      <div className="grid grid-cols-3 gap-1 pt-1.5 border-t border-slate-50 text-[10px]">
+                                        <div>
+                                          <span className="text-slate-405 block text-[8.5px] font-bold text-slate-400">कुल मात्रा:</span>
+                                          <strong className="text-slate-700 font-extrabold font-sans">{stats.tot} {stats.unitName}</strong>
+                                        </div>
+                                        <div>
+                                          <span className="text-slate-405 block text-[8.5px] font-bold text-slate-400">शेष मात्रा:</span>
+                                          <strong className={`font-black font-sans ${stats.rem <= 5 ? "text-rose-600 animate-pulse" : "text-emerald-700"}`}>{stats.rem} {stats.unitName}</strong>
+                                        </div>
+                                        <div>
+                                          <span className="text-slate-405 block text-[8.5px] font-bold text-slate-400">उपयोग (खपत):</span>
+                                          <strong className="text-sky-700 font-black font-sans">{stats.used} {stats.unitName}</strong>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             ) : (
-                              <p className="text-[10px] text-slate-400 italic font-sans">इस कैटेगरी में कोई स्टॉक उपलब्ध नहीं है।</p>
+                              <p className="text-[10px] text-slate-400 italic font-sans text-center py-4 bg-white rounded-2xl border border-dashed border-slate-200">
+                                इस कैटेगरी में कोई स्टॉक उपलब्ध नहीं है।
+                              </p>
                             )}
                           </div>
                         );
@@ -4526,6 +5575,111 @@ export const AndroidDashboard: React.FC = () => {
                       </div>
                     </div>
                   )}
+
+                  {/* 📱 PLAY STORE READY RESOUCE & PRIVACY CENTER */}
+                  <div className="p-4 bg-gradient-to-tr from-slate-900 to-indigo-950 text-white rounded-[26px] border border-indigo-900/50 space-y-4 shadow-xl">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-base">🚀</span>
+                      <div>
+                        <strong className="text-xs font-black block text-indigo-305">प्ले स्टोर लॉन्चपैड (Play Store Hub)</strong>
+                        <span className="text-[8.5px] text-indigo-200">गोपनीयता नीति (Privacy Policy) एवं भविष्य की कार्ययोजना</span>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-indigo-900/40 my-1 pt-1.5 space-y-3.5">
+                      {/* Section 1: Privacy Policy copy/print box */}
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10.5px] font-black text-amber-400 flex items-center space-x-1">
+                            <span>📄 प्ले स्टोर गोपनीयता नीति (Privacy Policy)</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const privacyText = `कृषि प्रबंधन वेब ऐप (Agri-Ecosystem) - Privacy Policy
+
+Last Updated: June 2026
+
+1. परिचय (Introduction)
+यह गोपनीयता नीति यह स्पष्ट करती है कि यह "कृषि प्रबंधन वेब ऐप" उपयोगकर्ता डेटा को किस प्रकार सुरक्षित रखता है। हम मुख्य रूप से कृषि स्टॉक, बही-खाता, लेबर रिकॉर्ड और फसल आंकड़ों को केवल आपके व्यक्तिगत सुरक्षा के साथ क्लाउड पर सहेजते हैं।
+
+2. एकत्रित की जाने वाली जानकारी (Data Collection)
+- उपयोगकर्ता की जानकारी (नाम, ईमेल, मोबाइल नंबर) ताकि वे और उनके ऑपरेटर सुरक्षित लॉगिन कर सकें।
+- कृषि वित्तीय रिकॉर्ड (फसल विक्रय, खाद-बीज बही, व्यय, लेबर भुगतान)।
+- कैमरा और मीडिया एक्सेस: भविष्य में जब उपयोगकर्ता अपनी फसलों, खाद बिल रसीदों आदि की तस्वीरें खींचकर अपलोड करेंगे, तब उनकी अनुमति से कैमरा और मीडिया का उपयोग फोटोग्राफ सहेजने के लिए किया जाएगा।
+
+3. डेटा उपयोग (Data Usage)
+- आपके स्टॉक व बही खाते का सटीक विश्लेषण प्रदर्शित करने में।
+- सुरक्षित एवं ऑडिटेड ऑपरेटर लॉग ट्रैकिंग के लिए।
+
+4. तृतीय पक्ष प्रकटीकरण (Third-Party Sharing)
+हम किसी भी स्थिति में आपका डेटा किसी बाहरी पक्ष को नहीं बेचते हैं और सुरक्षा प्रोटोकॉल (Firestore Database Secure Rules) का पूरी तरह पालन करते हैं।
+
+5. संपर्क (Contact)
+किसी भी प्रश्न हेतु डेवलपर ईमेल kachramtech@gmail.com पर संपर्क कर सकते हैं।`;
+                              navigator.clipboard.writeText(privacyText);
+                              alert("✅ गोपनीयता नीति (Privacy Policy) क्लिपबोर्ड पर कॉपी हो गई है! इसे आप अपनी प्ले कंसोल वेबसाइट या किसी दस्तावेज में पेस्ट कर सकते हैं।");
+                            }}
+                            className="bg-indigo-900 hover:bg-indigo-805 text-[8.5px] font-black text-amber-300 font-sans px-2.5 py-1 rounded-lg border border-indigo-700/55 transition-all shadow-md active:scale-95 shrink-0 cursor-pointer"
+                          >
+                            📋 कॉपी करें (Copy Hindi Text)
+                          </button>
+                        </div>
+                        <p className="text-[9.5px] text-slate-300 leading-relaxed font-sans">
+                          यह नीति प्ले कंसोल पर ऐप सबमिशन के दौरान <strong>"Privacy Policy URL"</strong> सेक्शन में डाली जानी आवश्यक है। नीचे स्क्रॉल करके इसका पूरा पाठ देखें:
+                        </p>
+                        <div className="h-28 overflow-y-auto bg-slate-950 p-2.5 rounded-xl text-[9px] font-mono text-slate-405 leading-relaxed border border-slate-900 select-all scrollbar-thin">
+                          <strong>कृषि प्रबंधन वेब ऐप (Agri-Ecosystem) - Privacy Policy</strong><br/><br/>
+                          <strong>Last Updated: June 2026</strong><br/><br/>
+                          <strong>1. परिचय (Introduction)</strong><br/>
+                          यह "कृषि प्रबंधन वेब ऐप" उपयोगकर्ता डेटा को उनकी सहमति के बिना कहीं साझा नहीं करता है। सभी कृषि वित्तीय रिकॉर्ड और खाद/बीज स्टॉक आंकड़ों की शुद्ध गोपनीय सुरक्षा फायरबेस फायरस्टोर के सुरक्षित सुरक्षा नियमों (Firestore Rules) के अनुसार की जाती है।<br/><br/>
+                          <strong>2. अनुमति तथा सेंसिटिव फीचर्स (Permissions & Sensitive Features)</strong><br/>
+                          - <strong>कैमरा तथा स्टोरेज (Camera & Media Storage):</strong> जब आप भविष्य में फसलों के पत्तों या बीमारी की तस्वीरें, खाद/दवाई के रसीद बिल अपलोड करेंगे, तब यह ऐप आपके मोबाइल कैमरे और स्टोरेज से मीडिया फाइलों को आपकी लाइव अनुमति से प्रोसेस करेगा।<br/>
+                          - <strong>सुरक्षा (Security):</strong> क्रेडेंशियल्स को पासवर्ड और ईमेल के जरिए अत्यधिक सुरक्षित एन्क्रिप्शन प्रणाली में सहेजा जाता है।<br/><br/>
+                          <strong>3. बाहरी साझाकरण (Third-Party Disclosure)</strong><br/>
+                          हमारा प्लेटफ़ॉर्म उपयोगकर्ताओं के निजी कृषि बही-खाता दस्तावेजों को कभी भी किसी कमर्शियल विज्ञापनदाता या तीसरे पक्ष के हाथों साझा अथवा विक्रय नहीं करता।<br/><br/>
+                          <strong>4. संपर्क विवरण (Developer Support)</strong><br/>
+                          kachramtech@gmail.com
+                        </div>
+                      </div>
+
+                      {/* Section 2: Technical APK converter & Camera Roadmap */}
+                      <div className="space-y-2 bg-slate-950/55 p-3 rounded-2xl border border-indigo-900/30">
+                        <span className="text-[10.5px] font-black text-emerald-400 block border-b border-indigo-950 pb-1 flex items-center">
+                          <span>🛠️ एंड्रॉयड APK एवं कैमरा एकीकरण कार्ययोजना (Roadmap)</span>
+                        </span>
+                        
+                        <div className="space-y-2 text-[9.5px] text-slate-350 leading-relaxed">
+                          <div>
+                            <span className="font-extrabold text-white block">1️⃣ वेब से APK रूपांतरण (Web to APK Transition):</span>
+                            हम इस रिस्पॉन्सिव वेब ऐप को <strong>CapacitorJS</strong> या <strong>Google Bubblewrap</strong> का उपयोग करके नेटिव एपीके (Native APK) में बदलेंगे। इससे वेब ऐप बिना किसी फ्रेम या यूआरएल पट्टी के सीधे एंड्रॉयड ऐप की तरह खुलेगी।
+                          </div>
+
+                          <div>
+                            <span className="font-extrabold text-white block">2️⃣ कैमरा व फाइल अपलोड सिस्टम (Native Camera Integration):</span>
+                            फोटो/वीडियो कैप्चर करने के लिए हम मानक एचटीएमएल कैमरा एपीआई का उपयोग करेंगे, जो एपीके में सीधे काम करेगा:
+                            <code className="text-emerald-300 font-mono text-[8px] bg-slate-900 px-1 py-0.5 rounded block mt-1">
+                              &lt;input type="file" accept="image/*" capture="camera" /&gt;
+                            </code>
+                            एपीके के अंदर कैमरा खोलने पर एंड्रॉयड यूजर से रीयल-टाइम में कैमरा परमिशन पूछेगा।
+                          </div>
+
+                          <div>
+                            <span className="font-extrabold text-white block">3️⃣ एंड्रॉइड मेनिफेस्ट परमिशन फाइल (AndroidManifest.xml Settings):</span>
+                            एपीके बनाते समय एंड्रॉइड पैकेज के मेनिफेस्ट फाइल में कैमरे और ऑडियो उपयोग हेतु निम्नलिखित अनुमतियाँ जोड़ी जानी आवश्यक होंगी:
+                            <div className="bg-slate-900 p-1 rounded-md text-[7.5px] font-mono text-slate-400 mt-1 space-y-0.5">
+                              <div>&lt;uses-permission android:name="android.permission.CAMERA" /&gt;</div>
+                              <div>&lt;uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" /&gt;</div>
+                            </div>
+                          </div>
+
+                          <div className="p-2 bg-indigo-950 rounded-xl border border-indigo-900/60 text-[9px] text-slate-300">
+                            📢 <strong>कमाल की बात:</strong> हमने इस वेब ऐप के <code>metadata.json</code> फाइल में पहले से ही <code>"camera", "microphone"</code> अनुमतियों को घोषित कर दिया है! इसका मतलब यह वेब ऐप पूरी तरह एंड्रॉयड वेबव्यू (WebView) तथा कैमरे हेतु तैयार है।
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -5068,17 +6222,27 @@ export const AndroidDashboard: React.FC = () => {
                                       className="w-full bg-white border border-slate-250 px-2.5 py-1.5 rounded-xl outline-none text-xs font-bold text-slate-800"
                                       placeholder="कंपनी/ब्रांड (उदा: इफको)"
                                     />
+                                    <div className="flex items-center space-x-2">
+                                      <span className="text-[10px] text-slate-600 block shrink-0 font-sans">बोरी वजन (कि.ग्राम):</span>
+                                      <input
+                                        type="number"
+                                        value={fertilizerEditForm.bagWeight}
+                                        onChange={(e) => setFertilizerEditForm({ ...fertilizerEditForm, bagWeight: e.target.value })}
+                                        className="w-20 bg-white border border-slate-250 px-2.5 py-1.5 rounded-xl outline-none text-xs font-bold text-slate-800"
+                                        placeholder="50"
+                                      />
+                                    </div>
                                     <div className="flex justify-end space-x-2 pt-1 font-sans text-[10.5px]">
                                       <button
                                         type="button"
                                         onClick={() => setEditingFertilizerId(null)}
-                                        className="px-3 py-1.5 bg-slate-200 border border-slate-300 text-slate-605 text-slate-700 rounded-xl cursor-pointer font-bold"
+                                        className="px-3 py-1.5 bg-slate-200 border border-slate-300 text-slate-700 rounded-xl cursor-pointer font-bold"
                                       >
                                         रद्द करें
                                       </button>
                                       <button
                                         type="button"
-                                        onClick={() => handleUpdateFertilizerObj(f.id, fertilizerEditForm.name, fertilizerEditForm.company)}
+                                        onClick={() => handleUpdateFertilizerObj(f.id, fertilizerEditForm.name, fertilizerEditForm.company, Number(fertilizerEditForm.bagWeight) || 50)}
                                         className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl shadow cursor-pointer font-bold"
                                       >
                                         सुरक्षित करें 💾
@@ -5096,14 +6260,14 @@ export const AndroidDashboard: React.FC = () => {
                                   </div>
                                   <div>
                                     <strong className="text-xs text-slate-850 block font-black">{f.name}</strong>
-                                    <span className="text-[9px] text-slate-400 block mt-0.5">ब्रांड/कंपनी: <strong className="text-slate-650">{f.company}</strong></span>
+                                    <span className="text-[9px] text-slate-400 block mt-0.5">बोरी वजन: <strong className="text-indigo-700">{f.bagWeight || 50} कि.ग्राम</strong> | ब्रांड: <strong className="text-slate-650">{f.company}</strong></span>
                                   </div>
                                 </div>
                                 <div className="flex items-center space-x-1.5">
                                   <button
                                     onClick={() => {
                                       setEditingFertilizerId(f.id);
-                                      setFertilizerEditForm({ name: f.name, company: f.company });
+                                      setFertilizerEditForm({ name: f.name, company: f.company, bagWeight: String(f.bagWeight || 50) });
                                     }}
                                     className="text-indigo-600 hover:text-indigo-850 font-bold text-[9.5px] scale-95 transition-all outline-none cursor-pointer border-none bg-transparent"
                                   >
@@ -5723,8 +6887,8 @@ export const AndroidDashboard: React.FC = () => {
                                       <span className="text-slate-900 block font-bold">
                                         {farmers.find(f => f.id === t.farmerId)?.name || "अज्ञात किसान"}
                                       </span>
-                                      <span className="text-slate-400 block text-[9px] font-normal font-sans mt-0.5">
-                                        📅 {t.date} | Cost of {t.crop}
+                                      <span className="text-slate-450 block text-[9px] font-normal font-sans mt-0.5">
+                                        📅 {t.date} | {t.crop}
                                       </span>
                                     </div>
                                     <div className="text-right">
@@ -5750,7 +6914,7 @@ export const AndroidDashboard: React.FC = () => {
 
             {/* Standard Android Navigation Bottom Buttons */}
             <div className="px-6 py-3.5 bg-indigo-950/95 border-t border-slate-900 flex justify-around items-center text-slate-400 text-center text-xs">
-              <button onClick={() => { setActiveApp(null); setShowAddForm(false); }} className="hover:text-white transition-all font-sans font-black">
+              <button onClick={() => { setActiveApp(null); setShowAddForm(false); }} className="hover:text-white transition-all font-sans font-black font-semibold">
                 ◀ पीछे जाएं (Back)
               </button>
               <button onClick={() => { setActiveApp(null); setShowAddForm(false); }} className="w-4.5 h-4.5 bg-slate-800 rounded-full border-2 border-slate-700 hover:bg-slate-700">
@@ -5768,7 +6932,7 @@ export const AndroidDashboard: React.FC = () => {
       {/* 🔐 MULTI-FUNCTION AUTHENTICATION SCREEN OVERLAY (Login / Register / Forgot Password) */}
       {isLoginModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-[#0b1220] border border-slate-805 p-6 rounded-[28px] w-full max-w-[380px] text-left space-y-4 shadow-2.5xl relative animate-scaleIn">
+          <div className="bg-[#0b1220] border border-slate-800 p-6 rounded-[28px] w-full max-w-[380px] text-left space-y-4 shadow-2xl relative animate-scaleIn">
             
             {/* Close modal button */}
             <button
@@ -6041,18 +7205,18 @@ export const AndroidDashboard: React.FC = () => {
                     <input
                       type="text"
                       required
-                      placeholder="उदा: देशी, अंकुर-555, हाइब्रिड"
+                      placeholder="उदा: 3020, मोती, सरसा"
                       value={quickAddFormState.variety}
                       onChange={(e) => setQuickAddFormState({...quickAddFormState, variety: e.target.value})}
                       className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 font-medium focus:border-emerald-500 outline-none transition-all"
                     />
                   </div>
-                  <div className="space-y-1 flex-1">
-                    <label className="text-[10px] text-slate-400 uppercase font-black tracking-wide block">कंपनी / निर्मित ब्रांड *</label>
+                                    <div className="space-y-1">
+                    <label className="text-[10px] text-slate-400 uppercase font-black tracking-wide block">कंपनी / ब्रांड *</label>
                     <input
                       type="text"
                       required
-                      placeholder="उदा: रासी, महिको, सिंजेंटा"
+                      placeholder="उदा: रासी, महिको, अजित"
                       value={quickAddFormState.company}
                       onChange={(e) => setQuickAddFormState({...quickAddFormState, company: e.target.value})}
                       className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 font-medium focus:border-emerald-500 outline-none transition-all"
@@ -6065,57 +7229,51 @@ export const AndroidDashboard: React.FC = () => {
               {quickAddType === "farm" && (
                 <>
                   <div className="space-y-1">
-                    <label className="text-[10px] text-slate-400 uppercase font-black tracking-wide block">किसान का चयन करें *</label>
+                    <label className="text-[10px] text-slate-400 uppercase font-black tracking-wide block">किसान चुनें *</label>
                     <select
                       required
                       value={quickAddFormState.farmerId}
                       onChange={(e) => setQuickAddFormState({...quickAddFormState, farmerId: e.target.value})}
-                      className="w-full bg-slate-905 bg-slate-900 border border-slate-800 text-white rounded-xl p-2 font-bold outline-none text-xs"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white font-medium focus:border-emerald-500 outline-none transition-all"
                     >
-                      <option value="">-- किसान चुनें --</option>
-                      {farmers.map((f) => (
-                        <option key={f.id} value={f.id}>👤 {f.name} ({f.village})</option>
+                      <option value="">-- किसान का चयन करें --</option>
+                      {farmers.map(f => (
+                        <option key={f.id} value={f.id}>{f.name} ({f.village})</option>
                       ))}
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] text-slate-400 uppercase font-black tracking-wide block">खेत / प्लाट का नाम *</label>
+                    <label className="text-[10px] text-slate-400 uppercase font-black tracking-wide block">खेत / प्लॉट का नाम *</label>
                     <input
                       type="text"
                       required
-                      placeholder="उदा: कुएं वाला खेत, घर के पीछे"
+                      placeholder="उदा: कुएँ वाला, नहर वाला, घर के पीछे"
                       value={quickAddFormState.name}
                       onChange={(e) => setQuickAddFormState({...quickAddFormState, name: e.target.value})}
                       className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 font-medium focus:border-emerald-500 outline-none transition-all"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <label className="text-[10px] text-slate-400 uppercase font-black tracking-wide block">रकबा (एकड़) *</label>
-                      <input
-                        type="number"
-                        step="any"
-                        required
-                        placeholder="उदा: 2.5"
-                        value={quickAddFormState.acreage}
-                        onChange={(e) => setQuickAddFormState({...quickAddFormState, acreage: e.target.value})}
-                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 font-medium focus:border-emerald-500 outline-none transition-all font-mono"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] text-slate-400 uppercase font-black tracking-wide block">सक्रिय फसल *</label>
-                      <select
-                        required
-                        value={quickAddFormState.crop}
-                        onChange={(e) => setQuickAddFormState({...quickAddFormState, crop: e.target.value})}
-                        className="w-full bg-slate-905 bg-slate-900 border border-slate-800 text-white rounded-xl p-2 font-bold outline-none text-[10.5px] h-[34px]"
-                      >
-                        <option value="">-- फसल चुनें --</option>
-                        {registeredCrops.map((c) => (
-                          <option key={c.id} value={`${c.name} (${c.variety})`}>{c.name} ({c.variety})</option>
-                        ))}
-                      </select>
-                    </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-400 uppercase font-black tracking-wide block">खेत का रकबा (Acre) *</label>
+                    <input
+                      type="number"
+                      required
+                      step="0.01"
+                      placeholder="उदा: 3.5"
+                      value={quickAddFormState.acreage}
+                      onChange={(e) => setQuickAddFormState({...quickAddFormState, acreage: e.target.value})}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 font-medium focus:border-emerald-500 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-400 uppercase font-black tracking-wide block">सक्रिय फ़सल (Crop Name)</label>
+                    <input
+                      type="text"
+                      placeholder="उदा: सोयाबीन, गेहूँ"
+                      value={quickAddFormState.crop}
+                      onChange={(e) => setQuickAddFormState({...quickAddFormState, crop: e.target.value})}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 font-medium focus:border-emerald-500 outline-none transition-all"
+                    />
                   </div>
                 </>
               )}
@@ -6124,24 +7282,35 @@ export const AndroidDashboard: React.FC = () => {
               {quickAddType === "fertilizer" && (
                 <>
                   <div className="space-y-1">
-                    <label className="text-[10px] text-slate-400 uppercase font-black tracking-wide block">उर्वरक / खाद का नाम *</label>
+                    <label className="text-[10px] text-slate-400 uppercase font-black tracking-wide block">खाद / उर्वरक का नाम *</label>
                     <input
                       type="text"
                       required
-                      placeholder="उदा: यूरिया (Urea), DAP, NPK"
+                      placeholder="उदा: यूरिया, डीएपी (DAP), पोटाश"
                       value={quickAddFormState.name}
                       onChange={(e) => setQuickAddFormState({...quickAddFormState, name: e.target.value})}
                       className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 font-medium focus:border-emerald-500 outline-none transition-all"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] text-slate-400 uppercase font-black tracking-wide block">ब्रांड / निर्माण कंपनी *</label>
+                    <label className="text-[10px] text-slate-400 uppercase font-black tracking-wide block">निर्माण कंपनी *</label>
                     <input
                       type="text"
                       required
                       placeholder="उदा: इफको (IFFCO), कृभको, आईपीएल"
                       value={quickAddFormState.company}
                       onChange={(e) => setQuickAddFormState({...quickAddFormState, company: e.target.value})}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 font-medium focus:border-emerald-500 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-400 uppercase font-black tracking-wide block">बोरी क्षमता / वजन (कि.ग्राम) *</label>
+                    <input
+                      type="number"
+                      required
+                      placeholder="उदा: 50"
+                      value={quickAddFormState.bagWeight}
+                      onChange={(e) => setQuickAddFormState({...quickAddFormState, bagWeight: e.target.value})}
                       className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 font-medium focus:border-emerald-500 outline-none transition-all"
                     />
                   </div>
@@ -6310,7 +7479,7 @@ export const AndroidDashboard: React.FC = () => {
               </p>
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-600 block">कितनी मात्रा जोड़ना चाहते हैं?</label>
+              <label className="text-[10px] font-bold text-slate-650 block">कितनी मात्रा जोड़ना चाहते हैं?</label>
               <input
                 type="number"
                 placeholder="संख्या दर्ज करें"
@@ -6319,6 +7488,22 @@ export const AndroidDashboard: React.FC = () => {
                 className="w-full p-2.5 border border-slate-200 text-slate-800 rounded-lg text-xs font-sans outline-none focus:ring-1 focus:ring-amber-500"
               />
             </div>
+
+            {/* If the item is a fertilizer, show unit selection */}
+            {stockList.find(s => s.id === stockQuickRefillItemId)?.type === "fertilizer" && (
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-600 block">रीफिल इकाई (Refill Unit)</label>
+                <select
+                  value={quickRefillUnit}
+                  onChange={(e) => setQuickRefillUnit(e.target.value)}
+                  className="w-full p-2 border border-slate-205 rounded-lg text-xs bg-white text-slate-800 font-sans font-bold"
+                >
+                  <option value="कि.ग्राम">कि.ग्राम (KG)</option>
+                  <option value="बोरी">बोरी (Bags)</option>
+                </select>
+              </div>
+            )}
+
             <div className="flex space-x-2 pt-2 text-[11px]">
               <button
                 type="button"
@@ -6341,19 +7526,44 @@ export const AndroidDashboard: React.FC = () => {
                   }
                   setStockList(prev => prev.map(s => {
                     if (s.id === stockQuickRefillItemId) {
-                      const updated = s.quantity + addedVal;
+                      let qtyToAdd = addedVal;
+                      let logDetails = "";
+                      if (s.type === "fertilizer") {
+                        const bagWeightInput = getFertilizerBagWeight(s.name);
+                        if (quickRefillUnit === "बोरी") {
+                          qtyToAdd = addedVal * bagWeightInput;
+                          logDetails = `त्वरित रिफिल: +${addedVal} बोरी (प्रति बोरी ${bagWeightInput} कि.ग्राम) = +${qtyToAdd} कि.ग्राम स्टॉक जोड़ा गया।`;
+                        } else {
+                          qtyToAdd = addedVal;
+                          logDetails = `त्वरित रिफिल: +${addedVal} कि.ग्राम स्टॉक जोड़ा गया।`;
+                        }
+                      } else {
+                        logDetails = `त्वरित रिफिल द्वारा स्टॉक बढ़ाया गया: +${addedVal} ${s.unit} जोड़ा गया।`;
+                      }
+
+                      const updated = s.quantity + qtyToAdd;
+                      const currentTotal = s.totalAdded !== undefined ? s.totalAdded : s.quantity;
+                      const nextTotal = currentTotal + qtyToAdd;
+
                       const log = {
                         id: "hist_" + Date.now(),
                         action: "refill" as const,
-                        quantityChange: addedVal,
+                        quantityChange: qtyToAdd,
                         finalQuantity: updated,
                         operatorName: currentUser?.name || "मुख्य यूजर",
                         date: new Date().toISOString(),
-                        details: `त्वरित रिफिल द्वारा स्टॉक बढ़ाया गया: +${addedVal} ${s.unit} जोड़ा गया।`
+                        details: logDetails
                       };
                       const updatedHistory = s.history ? [log, ...s.history] : [log];
-                      logAudit("UPDATE_STOCK_ITEM", s.id, "farmers", `स्टॉक आइटम रिफिल किया: ${s.name}, जोड़ा गया: ${addedVal} ${s.unit}, नया स्टॉक: ${updated} ${s.unit}`);
-                      return { ...s, quantity: updated, history: updatedHistory, updatedAt: new Date().toISOString() };
+                      logAudit("UPDATE_STOCK_ITEM", s.id, "farmers", `स्टॉक आइटम रिफिल किया: ${s.name}, जोड़ा गया: ${qtyToAdd} ${s.unit}, नया स्टॉक: ${updated} ${s.unit}`);
+                      return { 
+                        ...s, 
+                        quantity: updated, 
+                        totalAdded: nextTotal,
+                        unit: s.type === "fertilizer" ? "कि.ग्राम" : s.unit,
+                        history: updatedHistory, 
+                        updatedAt: new Date().toISOString() 
+                      };
                     }
                     return s;
                   }));
@@ -6373,47 +7583,104 @@ export const AndroidDashboard: React.FC = () => {
 
       {/* ✏️ EDIT STOCK MODAL */}
       {editingStockItem && (
-        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4 font-sans animate-fadeIn select-none">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-[325px] w-full p-5 space-y-4">
-            <h4 className="text-xs font-black text-slate-900 border-b pb-2">✏️ स्टॉक विवरण बदलें (Edit Item Details)</h4>
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4 font-sans animate-fadeIn">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-150 max-w-[340px] w-full p-5 space-y-4 text-left">
             
-            <div className="space-y-2 text-xs">
+            {/* Header section with category badge */}
+            <div className="border-b border-slate-100 pb-2.5">
+              <div className="flex justify-between items-center">
+                <h4 className="text-[13px] font-black text-slate-800">
+                  ✏️ स्टॉक विवरण संशोधन
+                </h4>
+                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+                  editingStockItem.type === "fertilizer" ? "bg-amber-100 text-amber-850" : 
+                  (editingStockItem.type === "seed" ? "bg-emerald-100 text-emerald-850" : "bg-pink-100 text-pink-850")
+                }`}>
+                  {editingStockItem.type === "fertilizer" ? "🍁 खाद (Fertilizer)" : 
+                   (editingStockItem.type === "seed" ? "🌱 बीज (Seed)" : "💊 कीटनाशक (Pesticide)")}
+                </span>
+              </div>
+            </div>
+
+            {/* Original Details Info Card */}
+            <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-2xl space-y-1">
+              <span className="text-[8.5px] font-extrabold text-slate-400 block uppercase tracking-wider">📦 मूल पंजीकृत जानकारी (Original Details):</span>
+              <div className="text-[10.5px] text-slate-705 leading-normal space-y-0.5 font-medium select-text">
+                <div>📌 <strong className="text-slate-900">नाम:</strong> {editingStockItem._originalName || editingStockItem.name}</div>
+                <div>🏢 <strong className="text-slate-900">कंपनी:</strong> {editingStockItem._originalCompany || editingStockItem.company}</div>
+                <div className="flex justify-between">
+                  <span>⚖️ <strong className="text-slate-900">मात्रा:</strong> {editingStockItem._originalQuantity !== undefined ? editingStockItem._originalQuantity : editingStockItem.quantity} {editingStockItem._originalUnit || editingStockItem.unit}</span>
+                  <span>💰 <strong className="text-slate-900">दर:</strong> ₹{editingStockItem._originalPrice !== undefined ? editingStockItem._originalPrice : (editingStockItem.pricePerUnit || "0")}/{editingStockItem._originalUnit || editingStockItem.unit}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Editing input fields prefilled with values */}
+            <div className="space-y-3 text-xs">
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 block">आइटम का नाम</label>
+                <label className="text-[10px] font-black text-slate-500 block">📝 नया आइटम नाम (New Item Name)</label>
                 <input
                   type="text"
-                  value={editingStockItem.name}
+                  value={editingStockItem.name || ""}
                   onChange={(e) => setEditingStockItem({ ...editingStockItem, name: e.target.value })}
-                  className="w-full p-2.5 border rounded-xl"
+                  className="w-full p-2 border border-slate-250 rounded-xl text-xs font-sans bg-slate-50 text-slate-800 focus:bg-white font-bold outline-none ring-1 ring-slate-100 focus:ring-amber-500 transition-all"
+                  placeholder="आइटम का नाम"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 block">निर्माता कंपनी</label>
+                <label className="text-[10px] font-black text-slate-500 block">🏢 निर्माता कंपनी का नाम (Manufacturer Brand)</label>
                 <input
                   type="text"
-                  value={editingStockItem.company}
+                  value={editingStockItem.company || ""}
                   onChange={(e) => setEditingStockItem({ ...editingStockItem, company: e.target.value })}
-                  className="w-full p-2.5 border rounded-xl"
+                  className="w-full p-2 border border-slate-250 rounded-xl text-xs font-sans bg-slate-50 text-slate-800 focus:bg-white font-bold outline-none ring-1 ring-slate-100 focus:ring-amber-500 transition-all"
+                  placeholder="कंपनी का नाम"
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-500 block">⚖️ स्टॉक मात्रा (Qty)</label>
+                  <input
+                    type="number"
+                    value={editingStockItem.quantity === undefined ? "" : editingStockItem.quantity}
+                    onChange={(e) => setEditingStockItem({ ...editingStockItem, quantity: e.target.value === "" ? "" : Number(e.target.value) })}
+                    className="w-full p-2 border border-slate-250 rounded-xl text-xs font-sans bg-slate-50 text-indigo-850 focus:bg-white font-bold outline-none ring-1 ring-slate-100 focus:ring-amber-500 transition-all"
+                    placeholder="मात्रा दर्ज करें"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-500 block">📦 इकाई (Unit)</label>
+                  <input
+                    type="text"
+                    value={editingStockItem.unit || ""}
+                    onChange={(e) => setEditingStockItem({ ...editingStockItem, unit: e.target.value })}
+                    className="w-full p-2 border border-slate-250 rounded-xl text-xs font-sans bg-slate-50 text-slate-800 focus:bg-white font-bold outline-none ring-1 ring-slate-100 focus:ring-amber-500 transition-all"
+                    placeholder="बोरी / कि.ग्रा. / लीटर"
+                  />
+                </div>
+              </div>
+
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 block">मात्रा इकाई</label>
+                <label className="text-[10px] font-black text-slate-500 block">💰 खरीद दर प्रति इकाई (Price per Unit - ₹)</label>
                 <input
-                  type="text"
-                  value={editingStockItem.unit}
-                  onChange={(e) => setEditingStockItem({ ...editingStockItem, unit: e.target.value })}
-                  className="w-full p-2.5 border rounded-xl"
+                  type="number"
+                  value={editingStockItem.pricePerUnit === undefined ? "" : editingStockItem.pricePerUnit}
+                  onChange={(e) => setEditingStockItem({ ...editingStockItem, pricePerUnit: e.target.value === "" ? "" : Number(e.target.value) })}
+                  className="w-full p-2 border border-slate-250 rounded-xl text-xs font-sans bg-slate-50 text-emerald-850 focus:bg-white font-bold outline-none ring-1 ring-slate-100 focus:ring-amber-500 transition-all"
+                  placeholder="कीमत दर्ज करें"
                 />
               </div>
             </div>
 
+            {/* Form actions */}
             <div className="flex space-x-2 pt-2 text-[11px]">
               <button
                 type="button"
                 onClick={() => setEditingStockItem(null)}
-                className="flex-1 bg-slate-100 text-slate-600 py-2.5 rounded-xl font-bold cursor-pointer hover:bg-slate-200 text-center"
+                className="flex-1 bg-slate-100 text-slate-600 hover:bg-slate-200 py-2.5 rounded-xl font-bold cursor-pointer text-center outline-none transition-all"
               >
                 रद्द करें
               </button>
@@ -6424,36 +7691,74 @@ export const AndroidDashboard: React.FC = () => {
                     alert("❌ नाम अनिवार्य है!");
                     return;
                   }
+                  
                   setStockList(prev => prev.map(s => {
                     if (s.id === editingStockItem.id) {
+                      const oldQty = Number(s.quantity) || 0;
+                      const newQty = Number(editingStockItem.quantity) || 0;
+                      const oldPrice = Number(s.pricePerUnit) || 0;
+                      const newPrice = Number(editingStockItem.pricePerUnit) || 0;
+                      
+                      const changes: string[] = [];
+                      if (s.name !== editingStockItem.name) {
+                        changes.push(`नाम: "${s.name}" ➔ "${editingStockItem.name}"`);
+                      }
+                      if (s.company !== editingStockItem.company) {
+                        changes.push(`कंपनी: "${s.company}" ➔ "${editingStockItem.company}"`);
+                      }
+                      if (s.unit !== editingStockItem.unit) {
+                        changes.push(`इकाई: "${s.unit}" ➔ "${editingStockItem.unit}"`);
+                      }
+                      if (oldQty !== newQty) {
+                        changes.push(`मात्रा: "${oldQty}" ➔ "${newQty}"`);
+                      }
+                      if (oldPrice !== newPrice) {
+                        changes.push(`दर/मूल्य: "₹${oldPrice}" ➔ "₹${newPrice}"`);
+                      }
+
+                      const detailsStr = changes.length > 0 
+                        ? `संशोधन विवरण: ${changes.join(", ")}।`
+                        : "विवरण अपडेट किया गया (कोई बदलाव नहीं)।";
+
                       const log = {
                         id: "hist_" + Date.now(),
                         action: "edit" as const,
-                        quantityChange: 0,
-                        finalQuantity: s.quantity,
+                        quantityChange: newQty - oldQty,
+                        finalQuantity: newQty,
                         operatorName: currentUser?.name || "मुख्य यूजर",
                         date: new Date().toISOString(),
-                        details: `विवरण संशोधित किया गया: नाम बढ़कर "${editingStockItem.name}", कंपनी "${editingStockItem.company}", इकाई: ${editingStockItem.unit}।`
+                        details: detailsStr
                       };
                       const updatedHistory = s.history ? [log, ...s.history] : [log];
+                      const newEditLog = {
+                        operator: currentUser?.name || "मुख्य यूजर",
+                        timestamp: new Date().toISOString(),
+                        changedText: detailsStr
+                      };
+                      const updatedEditLogs = s.editLogs ? [...s.editLogs, newEditLog] : [newEditLog];
+
                       return {
                         ...s,
                         name: editingStockItem.name,
                         company: editingStockItem.company,
                         unit: editingStockItem.unit,
+                        quantity: newQty,
+                        pricePerUnit: newPrice,
                         history: updatedHistory,
+                        editLogs: updatedEditLogs,
                         updatedAt: new Date().toISOString()
                       };
                     }
                     return s;
                   }));
-                  logAudit("EDIT_STOCK_ITEM", editingStockItem.id, "farmers", `संशोधित किया: ${editingStockItem.name}, कंपनी: ${editingStockItem.company}`);
+                  
+                  logAudit("EDIT_STOCK_ITEM", editingStockItem.id, "farmers", `संशोधित किया: ${editingStockItem.name}, कंपनी: ${editingStockItem.company}, स्टॉक मात्रा: ${editingStockItem.quantity}, दर: ₹${editingStockItem.pricePerUnit}`);
                   setEditingStockItem(null);
                   alert("✅ स्टॉक जानकारी सफलतापूर्वक अपडेट की गई!");
                 }}
-                className="flex-1 bg-amber-600 text-white py-2.5 rounded-xl font-black cursor-pointer hover:bg-amber-700 text-center shadow"
+                className="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-2.5 rounded-xl font-black cursor-pointer text-center shadow transition-all outline-none"
               >
-                अपडेट करें
+                संशोधन सहेजें 💾
               </button>
             </div>
           </div>
@@ -6461,68 +7766,461 @@ export const AndroidDashboard: React.FC = () => {
       )}
 
       {/* 📋 VIEW STOCK HISTORY MODAL */}
-      {viewingStockHistoryItem && (
-        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4 font-sans animate-fadeIn select-none">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-[340px] w-full p-5 space-y-4 max-h-[85vh] overflow-hidden flex flex-col">
-            <div className="border-b pb-2 flex justify-between items-center">
-              <div>
-                <h4 className="text-xs font-black text-slate-900">📋 स्टॉक इतिहास log - विवरण</h4>
-                <p className="text-[10px] text-amber-600 font-bold mt-0.5">{viewingStockHistoryItem.name} ({viewingStockHistoryItem.company})</p>
+      {viewingStockHistoryItem && (() => {
+        const isFertilizer = viewingStockHistoryItem.type === "fertilizer";
+        const bagW = isFertilizer ? (getFertilizerBagWeight(viewingStockHistoryItem.name) || 50) : 1;
+
+        const activeHistoryLogs = (() => {
+          const item = viewingStockHistoryItem;
+          if (item.history && item.history.length > 0) {
+            return item.history;
+          }
+          return [{
+            id: "hist_legacy_" + item.id,
+            action: "create" as const,
+            quantityChange: item.quantity,
+            finalQuantity: item.quantity,
+            operatorName: "मुख्य यूजर",
+            date: item.updatedAt || new Date().toISOString(),
+            details: `प्रारंभिक स्टॉक पंजीकरण: ${item.quantity} ${item.unit} दर्ज किया गया।`,
+            priceAtTime: item.pricePerUnit || 0
+          }];
+        })();
+
+        return (
+          <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4 font-sans animate-fadeIn select-none">
+            <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-[340px] w-full p-5 space-y-4 max-h-[85vh] overflow-hidden flex flex-col">
+              <div className="border-b pb-2 flex justify-between items-center">
+                <div>
+                  <h4 className="text-xs font-black text-slate-900">📋 स्टॉक इतिहास log - विवरण</h4>
+                  <p className="text-[10px] text-amber-600 font-bold mt-0.5">{viewingStockHistoryItem.name} ({viewingStockHistoryItem.company})</p>
+                </div>
+                <button 
+                  onClick={() => {
+                    setViewingStockHistoryItem(null);
+                    setEditingHistoryLogId(null);
+                  }}
+                  className="text-slate-400 hover:text-slate-650 text-base font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
               </div>
-              <button 
-                onClick={() => setViewingStockHistoryItem(null)}
-                className="text-slate-400 hover:text-slate-650 text-base font-bold cursor-pointer"
+
+              <div className="flex-1 overflow-y-auto space-y-3 py-2 pr-1 scrollbar-thin">
+                {activeHistoryLogs.map((log: any) => {
+                  const isEditingThisLog = editingHistoryLogId === log.id;
+
+                  const handleStartEditLog = () => {
+                    let initialLogUnit = log.originalUnit;
+                    if (!initialLogUnit) {
+                      initialLogUnit = isFertilizer ? "बोरी" : viewingStockHistoryItem.unit;
+                    }
+
+                    let prefilledQty = 0;
+                    let prefilledPrice = 0;
+
+                    const rawQty = Math.abs(log.quantityChange || 0);
+                    const rawPrice = log.priceAtTime !== undefined ? log.priceAtTime : (viewingStockHistoryItem.pricePerUnit || 0);
+
+                    if (isFertilizer) {
+                      if (initialLogUnit === "बोरी") {
+                        prefilledQty = Number((rawQty / bagW).toFixed(2));
+                        prefilledPrice = Number((rawPrice * bagW).toFixed(2));
+                      } else {
+                        prefilledQty = rawQty;
+                        prefilledPrice = rawPrice;
+                      }
+                    } else {
+                      prefilledQty = rawQty;
+                      prefilledPrice = rawPrice;
+                    }
+
+                    setEditingHistoryLogId(log.id);
+                    setEditLogQtyInput(prefilledQty);
+                    setEditLogPriceInput(prefilledPrice);
+                    setEditLogUnitMode(initialLogUnit as any);
+                  };
+
+                  const handleUnitModeLogChange = (newUnitMode: "बोरी" | "कि.ग्राम") => {
+                    if (newUnitMode !== editLogUnitMode) {
+                      const currentVal = Number(editLogQtyInput) || 0;
+                      const currentP = Number(editLogPriceInput) || 0;
+                      if (newUnitMode === "बोरी") {
+                        setEditLogQtyInput(Number((currentVal / bagW).toFixed(2)));
+                        setEditLogPriceInput(Number((currentP * bagW).toFixed(2)));
+                      } else {
+                        setEditLogQtyInput(Number((currentVal * bagW).toFixed(2)));
+                        setEditLogPriceInput(Number((currentP / bagW).toFixed(2)));
+                      }
+                      setEditLogUnitMode(newUnitMode);
+                    }
+                  };
+
+                  return (
+                    <div key={log.id} className="p-3 bg-slate-50 border border-slate-150 rounded-2xl space-y-1.5 text-[11px] font-sans">
+                      <div className="flex justify-between items-center">
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                          log.action === "create" ? "bg-blue-100 text-blue-800" :
+                          log.action === "refill" ? "bg-emerald-100 text-emerald-800" :
+                          log.action === "edit" ? "bg-purple-100 text-purple-800" :
+                          "bg-red-100 text-red-800"
+                        }`}>
+                          {log.action === "create" ? "➕ निर्मित" :
+                           log.action === "refill" ? "📦 जोड़ा गया" :
+                           log.action === "edit" ? "✏️ संशोधित" :
+                           "🌾 उपयोग (Used)"}
+                        </span>
+                        <div className="flex items-center space-x-1">
+                          {!isEditingThisLog && (
+                            <button
+                              onClick={handleStartEditLog}
+                              className="text-amber-700 hover:text-amber-800 font-bold bg-amber-50 hover:bg-amber-100 px-1.5 py-0.5 rounded text-[9.5px]"
+                            >
+                              ✏️ सुधारें
+                            </button>
+                          )}
+                          <span className="text-[9.5px] text-slate-400 font-mono">
+                            {new Date(log.date).toLocaleDateString("hi") + " " + new Date(log.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          </span>
+                        </div>
+                      </div>
+
+                      {isEditingThisLog ? (
+                        <div className="p-2.5 bg-white border border-amber-200 rounded-xl space-y-2.5 animate-fadeIn">
+                          <p className="text-[9.5px] text-amber-800 font-bold">📝 संशोधन प्रविष्टि विवरण:</p>
+                          
+                          {/* Unit Selector for Fertilizers */}
+                          {isFertilizer && (
+                            <div className="flex space-x-1 text-[10px]">
+                              <button
+                                type="button"
+                                onClick={() => handleUnitModeLogChange("बोरी")}
+                                className={`flex-1 py-1 rounded-md font-bold transition-all ${
+                                  editLogUnitMode === "बोरी"
+                                    ? "bg-amber-600 text-white shadow-sm"
+                                    : "bg-slate-100 text-slate-650 hover:bg-slate-200"
+                                }`}
+                              >
+                                बोरी (Bags)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleUnitModeLogChange("कि.ग्राम")}
+                                className={`flex-1 py-1 rounded-md font-bold transition-all ${
+                                  editLogUnitMode === "कि.ग्राम"
+                                    ? "bg-amber-600 text-white shadow-sm"
+                                    : "bg-slate-100 text-slate-650 hover:bg-slate-200"
+                                }`}
+                              >
+                                कि.ग्राम (KG)
+                              </button>
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[9.5px] text-slate-500 font-bold block mb-0.5">मात्रा ({isFertilizer ? editLogUnitMode : viewingStockHistoryItem.unit}) *</label>
+                              <input
+                                type="number"
+                                required
+                                value={editLogQtyInput}
+                                onChange={(e) => setEditLogQtyInput(e.target.value === "" ? "" : Number(e.target.value))}
+                                className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-sans text-slate-800 bg-slate-50 outline-none focus:ring-1 focus:ring-amber-500 font-bold"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[9.5px] text-slate-500 font-bold block mb-0.5">दर (₹ / {isFertilizer ? editLogUnitMode : viewingStockHistoryItem.unit})</label>
+                              <input
+                                type="number"
+                                required
+                                value={editLogPriceInput}
+                                onChange={(e) => setEditLogPriceInput(e.target.value === "" ? "" : Number(e.target.value))}
+                                className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-sans text-slate-800 bg-slate-50 outline-none focus:ring-1 focus:ring-amber-500 font-bold"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex space-x-1.5 pt-1 text-[10px]">
+                            <button
+                              type="button"
+                              onClick={() => setEditingHistoryLogId(null)}
+                              className="flex-1 py-1.5 bg-slate-100 text-slate-600 rounded-lg font-bold"
+                            >
+                              रद्द करें
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newQtyVal = Number(editLogQtyInput) || 0;
+                                const newPriceVal = Number(editLogPriceInput) || 0;
+
+                                if (newQtyVal <= 0) {
+                                  alert("❌ कृपया सही विवरण मात्रा प्रविष्ट करें!");
+                                  return;
+                                }
+
+                                let standardQty = newQtyVal;
+                                let standardPrice = newPriceVal;
+
+                                if (isFertilizer) {
+                                  if (editLogUnitMode === "बोरी") {
+                                    standardQty = newQtyVal * bagW;
+                                    standardPrice = newPriceVal / bagW;
+                                  } else {
+                                    standardQty = newQtyVal;
+                                    standardPrice = newPriceVal;
+                                  }
+                                }
+
+                                // Update this specific log and recalculate history logs running totals
+                                setStockList(prev => prev.map(s => {
+                                  if (s.id === viewingStockHistoryItem.id) {
+                                    const logs = s.history && s.history.length > 0 ? s.history : activeHistoryLogs;
+                                    const logsUpdated = logs.map(l => {
+                                      if (l.id === log.id) {
+                                        let updatedDetails = "";
+                                        const changeQty = l.action === "usage" ? -standardQty : standardQty;
+
+                                        if (l.action === "create") {
+                                          updatedDetails = isFertilizer
+                                            ? `प्रारंभिक स्टॉक पंजीकरण: ${newQtyVal} ${editLogUnitMode} (₹${newPriceVal}/${editLogUnitMode}) दर के हिसाब से किया गया।`
+                                            : `प्रारंभिक स्टॉक पंजीकरण: ${newQtyVal} ${s.unit} (₹${newPriceVal}/${s.unit}) दर के हिसाब से किया गया।`;
+                                        } else {
+                                          updatedDetails = isFertilizer
+                                            ? `संशोधित रिफिल विवरण: +${newQtyVal} ${editLogUnitMode} (₹${newPriceVal}/${editLogUnitMode}) दर के हिसाब से जोड़ा गया।`
+                                            : `संशोधित रिफिल विवरण: +${newQtyVal} ${s.unit} (₹${newPriceVal}/${s.unit}) जोड़ा गया।`;
+                                        }
+
+                                        return {
+                                          ...l,
+                                          quantityChange: changeQty,
+                                          priceAtTime: standardPrice,
+                                          originalQtyChange: newQtyVal,
+                                          originalUnit: isFertilizer ? editLogUnitMode : s.unit,
+                                          details: updatedDetails,
+                                          date: new Date().toISOString()
+                                        };
+                                      }
+                                      return l;
+                                    });
+
+                                    // Recalculate running totals backwards through history
+                                    let runningTotal = 0;
+                                    const sortedLogsReversed = [...logsUpdated].reverse();
+                                    const finalHistoryRecalculated = sortedLogsReversed.map(lItem => {
+                                      runningTotal += lItem.quantityChange;
+                                      return {
+                                        ...lItem,
+                                        finalQuantity: runningTotal
+                                      };
+                                    });
+                                    const reReversedHistory = finalHistoryRecalculated.reverse();
+
+                                    // Latest item price
+                                    const latestPrice = standardPrice;
+
+                                    const updatedItem = {
+                                      ...s,
+                                      quantity: runningTotal,
+                                      pricePerUnit: latestPrice,
+                                      history: reReversedHistory,
+                                      updatedAt: new Date().toISOString()
+                                    };
+
+                                    // Instantly update dialog view
+                                    setTimeout(() => {
+                                      setViewingStockHistoryItem(updatedItem);
+                                    }, 50);
+
+                                    return updatedItem;
+                                  }
+                                  return s;
+                                }));
+
+                                setEditingHistoryLogId(null);
+                                alert("✅ प्रविष्टि विवरण सफलतापूर्वक संशोधित कर दिया गया है!");
+                              }}
+                              className="flex-1 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-black"
+                            >
+                              सहेजें 💾
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="text-slate-700 leading-relaxed font-bold mt-1 text-[10.5px]">
+                            {log.details}
+                          </p>
+                          <div className="text-[9.5px] text-slate-400 flex justify-between pt-0.5">
+                            <span>कर्ता: <strong className="text-slate-600">{log.operatorName}</strong></span>
+                            <span>शेष मात्रा: <strong className="text-slate-700">
+                              {isFertilizer ? `${Number((log.finalQuantity / bagW).toFixed(2))} बोरी (${log.finalQuantity} क.ग्रा.)` : `${log.finalQuantity} ${viewingStockHistoryItem.unit}`}
+                            </strong></span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setViewingStockHistoryItem(null);
+                  setEditingHistoryLogId(null);
+                }}
+                className="w-full bg-slate-800 hover:bg-slate-900 text-white py-2.5 rounded-xl font-bold cursor-pointer text-xs text-center shadow"
               >
-                ✕
+                बंद करें
               </button>
             </div>
+          </div>
+        );
+      })()}
 
-            <div className="flex-1 overflow-y-auto space-y-3 py-2 pr-1 scrollbar-thin">
-              {(!viewingStockHistoryItem.history || viewingStockHistoryItem.history.length === 0) ? (
-                <div className="text-center py-6 text-[11px] text-slate-400 italic">
-                  कोई इतिहास विवरण उपलब्ध नहीं है।
+      {/* 📄 VIEW TRANSACTION DETAILS MODAL */}
+      {viewingTransaction && (() => {
+        const farUser = farmers.find(f => f.id === viewingTransaction.farmerId);
+        const netW = Math.max(0, Number(viewingTransaction.grossWeight || 0) - Number(viewingTransaction.deductKg || 0));
+        
+        return (
+          <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4 font-sans animate-fadeIn select-none">
+            <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-[340px] w-full p-5 space-y-4 max-h-[85vh] overflow-hidden flex flex-col animate-scaleUp">
+              <div className="border-b pb-2 flex justify-between items-center shrink-0">
+                <div>
+                  <h4 className="text-xs font-black text-slate-900">📄 लेन-देन विवरण व रसीद</h4>
+                  <p className="text-[10px] text-emerald-600 font-bold mt-0.5 font-mono">ID: {viewingTransaction.id}</p>
                 </div>
-              ) : (
-                viewingStockHistoryItem.history.map((log: any) => (
-                  <div key={log.id} className="p-3 bg-slate-50 border border-slate-150 rounded-2xl space-y-1.5 text-[11px] font-sans">
-                    <div className="flex justify-between items-center">
-                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                        log.action === "create" ? "bg-blue-100 text-blue-800" :
-                        log.action === "refill" ? "bg-emerald-100 text-emerald-800" :
-                        log.action === "edit" ? "bg-purple-100 text-purple-800" :
-                        "bg-red-100 text-red-800"
-                      }`}>
-                        {log.action === "create" ? "➕ निर्मित" :
-                         log.action === "refill" ? "📦 जोड़ा गया" :
-                         log.action === "edit" ? "✏️ संशोधित" :
-                         "🌾 उपयोग (Used)"}
-                      </span>
-                      <span className="text-[9.5px] text-slate-400 font-mono">
-                        {new Date(log.date).toLocaleDateString("hi") + " " + new Date(log.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                      </span>
-                    </div>
-                    <p className="text-slate-700 leading-relaxed font-bold mt-1 text-[10.5px]">
-                      {log.details}
-                    </p>
-                    <div className="text-[9.5px] text-slate-400 flex justify-between pt-0.5">
-                      <span>कर्ता: <strong className="text-slate-600">{log.operatorName}</strong></span>
-                      <span>शेष मात्रा: <strong className="text-slate-700">{log.finalQuantity} {viewingStockHistoryItem.unit}</strong></span>
+                <button 
+                  onClick={() => setViewingTransaction(null)}
+                  className="text-slate-400 hover:text-slate-650 text-base font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-3 flex-1 overflow-y-auto pr-1 scrollbar-thin">
+                {/* Farmer identity details */}
+                <div className="bg-slate-50 border border-slate-200 p-3 rounded-2xl space-y-1.5">
+                  <span className="text-[9px] text-slate-400 block font-bold tracking-wider uppercase">किसान व खेत विवरण</span>
+                  <div className="text-xs leading-5 text-slate-750">
+                    <div>👤 <strong className="text-slate-900">किसान:</strong> <span className="text-slate-800 font-black">{farUser?.name || "अज्ञात किसान"}</span></div>
+                    <div>📍 <strong className="text-slate-900">गांव:</strong> <span className="text-slate-700 font-bold">{farUser?.village || "N/A"}</span></div>
+                    {farUser?.phone && <div>📞 <strong className="text-slate-900">फ़ोन नंबर:</strong> <span className="text-slate-600 font-mono font-bold">{farUser.phone}</span></div>}
+                    <div>🌾 <strong className="text-slate-900">फ़सल:</strong> <span className="text-slate-600 font-bold">{viewingTransaction.crop || "N/A"}</span></div>
+                  </div>
+                </div>
+
+                {/* Financial Summary card */}
+                <div className="bg-emerald-50/50 border border-emerald-150 p-3 rounded-2xl space-y-2">
+                  <span className="text-[9px] text-emerald-805 block font-black tracking-wider uppercase">वित्तीय विवरण (Financials)</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-slate-700">कुल प्राप्त राशि (Net Income):</span>
+                    <span className="text-sm font-mono font-extrabold text-emerald-850">₹{viewingTransaction.amount?.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-slate-500 font-bold">वित्तीय वर्ष:</span>
+                    <span className="font-bold text-slate-750">{viewingTransaction.financialYear}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-slate-500 font-bold">श्रेणी / विवरण (Category):</span>
+                    <span className="font-bold text-slate-800">
+                      {viewingTransaction.category === "crop_sale" ? "🌾 फसल उपज बिक्री" : viewingTransaction.category === "subsidy" ? "🏛️ सब्सिडी/मुआवजा" : viewingTransaction.category === "rent" ? "🚜 कृषि यंत्र किराया" : "📦 अन्य विविध आय"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-slate-500 font-bold">भुगतान स्थिति:</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
+                      viewingTransaction.paymentStatus === "paid" ? "bg-emerald-100 text-emerald-800" :
+                      viewingTransaction.paymentStatus === "partially_paid" ? "bg-amber-100 text-amber-800" :
+                      "bg-rose-100 text-rose-800"
+                    }`}>
+                      {viewingTransaction.paymentStatus === "paid" ? "पूर्ण चुकता" :
+                       viewingTransaction.paymentStatus === "partially_paid" ? "आंशिक उधारी" :
+                       "बकाया उधारी"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Mandi weighment detailed slip if available */}
+                {viewingTransaction.isMandiSale && (
+                  <div className="bg-amber-50/40 border border-amber-200 p-3 rounded-2xl space-y-1.5 text-xs">
+                    <span className="text-[9px] text-amber-805 block font-black tracking-wider uppercase border-b border-amber-200/50 pb-0.5">मंडी तौल पर्ची विवरण (Weighment)</span>
+                    <div className="grid grid-cols-2 gap-y-1 gap-x-2 text-slate-700 pt-1 leading-relaxed">
+                      <div>🏢 <strong className="text-slate-900">व्यापारी:</strong></div>
+                      <div className="text-right text-slate-950 font-bold">{viewingTransaction.traderName || "अज्ञात व्यापारी"}</div>
+                      
+                      <div className="border-t border-slate-100 pt-1">📦 <strong className="text-slate-900">कुल वजन (Gross):</strong></div>
+                      <div className="text-right font-mono font-bold border-t border-slate-100 pt-1 text-slate-900">{viewingTransaction.grossWeight} किग्रा</div>
+                      
+                      <div>⚖️ <strong className="text-slate-900">तौल काट (Deductions):</strong></div>
+                      <div className="text-right font-mono text-rose-700 font-bold">-{viewingTransaction.deductKg || 0} किग्रा ({viewingTransaction.deductionRate || 0}%)</div>
+                      
+                      <div className="border-t border-slate-200 pt-1 font-bold">🌾 <strong className="text-slate-900 font-extrabold">शुद्ध वजन (Net):</strong></div>
+                      <div className="text-right font-mono font-black border-t border-slate-200 pt-1 text-emerald-800">{netW} किग्रा</div>
+                      
+                      <div>💰 <strong className="text-slate-900">अंकित दर:</strong></div>
+                      <div className="text-right font-mono text-slate-900 font-extrabold">₹{viewingTransaction.ratePerQuintal}/{viewingTransaction.rateType === "kg" ? "किग्रा" : "क्विंटल"}</div>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
+                )}
 
-            <button
-              type="button"
-              onClick={() => setViewingStockHistoryItem(null)}
-              className="w-full bg-slate-800 hover:bg-slate-900 text-white py-2.5 rounded-xl font-bold cursor-pointer text-xs text-center shadow"
-            >
-              बंद करें
-            </button>
+                {/* Credit balance detail if credit transaction */}
+                {viewingTransaction.isCreditSale && (
+                  <div className="bg-rose-50/55 border border-rose-205 p-3 rounded-2xl space-y-1 text-xs">
+                    <span className="text-[9px] text-rose-805 block font-bold uppercase border-b border-rose-100 pb-0.5">💳 उधारी / बकाया विवरण (Dues)</span>
+                    <div className="flex justify-between pt-1">
+                      <span className="text-slate-650">बकाया शेष उधारी:</span>
+                      <strong className="text-rose-700 font-mono font-extrabold">₹{(viewingTransaction.pendingAmount || 0).toLocaleString()}</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-650">भुगतान नियत तिथि:</span>
+                      <strong className="text-slate-700">{viewingTransaction.dueDate || "N/A"}</strong>
+                    </div>
+                  </div>
+                )}
+
+                {/* Voice / Note transcription details */}
+                {viewingTransaction.voiceTranscription && (
+                  <div className="bg-indigo-50/40 border border-indigo-200 p-3 rounded-2xl space-y-1 text-xs">
+                    <span className="text-[9px] text-indigo-805 block font-extrabold uppercase">🎙️ बोल नोट्स / पूरक विवरण</span>
+                    <p className="text-indigo-950 font-medium italic mt-0.5 leading-relaxed text-[10.5px]">
+                      "{viewingTransaction.voiceTranscription}"
+                    </p>
+                  </div>
+                )}
+
+                {/* Transaction dates logs */}
+                <div className="text-[9px] text-slate-400 space-y-0.5 px-1 leading-snug pt-1 font-sans">
+                  <div>📆 पंजीकरण दिनांक: <span className="text-slate-500 font-mono font-bold">{viewingTransaction.date}</span></div>
+                  {viewingTransaction.createdAt && <div>⏰ सिस्टम प्रविष्टि समय: <span className="text-slate-500 font-mono">{new Date(viewingTransaction.createdAt).toLocaleString("hi-IN")}</span></div>}
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-slate-150 shrink-0">
+                {/* Send WA reminder button */}
+                <button
+                  type="button"
+                  onClick={() => triggerWhatsAppReminder(viewingTransaction)}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 font-sans text-white py-2 rounded-xl text-xs font-black flex items-center justify-center space-x-1 cursor-pointer transition-all shadow-sm active:scale-95"
+                >
+                  <span className="text-base leading-none">💬</span>
+                  <span>व्हाट्सएप रसीद / स्मरण साझा करें</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setViewingTransaction(null)}
+                  className="w-full bg-slate-800 hover:bg-slate-900 font-sans text-white py-2.5 rounded-xl text-xs font-extrabold cursor-pointer text-center"
+                >
+                  बंद करें
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
     </div>
   );

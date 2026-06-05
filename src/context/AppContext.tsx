@@ -90,6 +90,7 @@ interface AppContextType {
   createTransaction: (txForm: any) => Promise<void>;
   updateTransaction: (id: string, txForm: any) => Promise<void>;
   createLabor: (laborForm: any) => Promise<void>;
+  updateLabor: (id: string, laborForm: any) => Promise<void>;
   handleAddPlotInline: (farmerId: string, name: string, acreage: number, crop: string) => Promise<string | undefined>;
   handleDeletePlot: (farmerId: string, plotId: string) => Promise<void>;
   handleUpdatePlot: (farmerId: string, plotId: string, name: string, acreage: number, crop: string) => Promise<void>;
@@ -355,6 +356,17 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           updatedAt: d.updatedAt?.toDate?.()?.toISOString() || d.updatedAt || new Date().toISOString(),
           createdByOperatorId: d.createdByOperatorId,
           lastUpdatedByOperatorId: d.lastUpdatedByOperatorId,
+          grossWeight: d.grossWeight !== undefined ? d.grossWeight : (d.mandiDetails?.grossWeight ?? null),
+          deductionRate: d.deductionRate !== undefined ? d.deductionRate : (d.mandiDetails?.deductionRate ?? null),
+          deductions: d.deductions !== undefined ? d.deductions : (d.mandiDetails?.deductions ?? null),
+          netWeight: d.netWeight !== undefined ? d.netWeight : (d.mandiDetails?.netWeight ?? null),
+          ratePerQuintal: d.ratePerQuintal !== undefined ? d.ratePerQuintal : (d.mandiDetails?.ratePerQuintal ?? null),
+          traderName: d.traderName !== undefined ? d.traderName : (d.mandiDetails?.traderName ?? null),
+          deductKg: d.deductKg !== undefined ? d.deductKg : (d.mandiDetails?.deductKg ?? null),
+          rateType: d.rateType !== undefined ? d.rateType : (d.mandiDetails?.rateType ?? null),
+          pendingAmount: d.pendingAmount !== undefined ? d.pendingAmount : (d.creditDetails?.pendingAmount ?? null),
+          dueDate: d.dueDate !== undefined ? d.dueDate : (d.creditDetails?.dueDate ?? null),
+          editLogs: d.editLogs || [],
         });
       });
       setTransactions(list);
@@ -905,6 +917,59 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       };
     }
 
+    const changedFields: string[] = [];
+    if (targetTx) {
+      if (Number(targetTx.amount || 0) !== Number(calculatedAmount)) {
+        changedFields.push(`राशि: ₹${targetTx.amount || 0} ➔ ₹${calculatedAmount}`);
+      }
+      if ((targetTx.crop || "") !== (txForm.crop || "")) {
+        changedFields.push(`फसल: ${targetTx.crop || "N/A"} ➔ ${txForm.crop || "N/A"}`);
+      }
+      if ((targetTx.date || "") !== (txForm.date || "")) {
+        changedFields.push(`तारीख: ${targetTx.date || "N/A"} ➔ ${txForm.date || "N/A"}`);
+      }
+      if (targetTx.isMandiSale !== !!txForm.isMandiSale) {
+        changedFields.push(`मंडी बिक्री स्थिति: ${targetTx.isMandiSale ? "हाँ" : "नहीं"} ➔ ${txForm.isMandiSale ? "हाँ" : "नहीं"}`);
+      } else if (txForm.isMandiSale) {
+        const prevGross = targetTx.grossWeight || 0;
+        const newGross = Number(txForm.grossWeight || 0);
+        if (prevGross !== newGross) {
+          changedFields.push(`कुल वजन: ${prevGross}kg ➔ ${newGross}kg`);
+        }
+        const prevDeduct = targetTx.deductKg || 0;
+        const newDeduct = Number(txForm.deductKg || 0);
+        if (prevDeduct !== newDeduct) {
+          changedFields.push(`वजन कटौती: ${prevDeduct}kg ➔ ${newDeduct}kg`);
+        }
+        const prevRate = targetTx.ratePerQuintal || 0;
+        const newRate = Number(txForm.amount || 0);
+        if (prevRate !== newRate) {
+          changedFields.push(`दर/भाव: ₹${prevRate} ➔ ₹${newRate}`);
+        }
+      }
+      if (targetTx.isCreditSale !== !!txForm.isCreditSale) {
+        changedFields.push(`उधारी स्थिति: ${targetTx.isCreditSale ? "हाँ" : "नहीं"} ➔ ${txForm.isCreditSale ? "हाँ" : "नहीं"}`);
+      } else if (txForm.isCreditSale) {
+        const prevPending = targetTx.pendingAmount || 0;
+        const newPending = Number(txForm.pendingAmount || 0);
+        if (prevPending !== newPending) {
+          changedFields.push(`उधारी बकाया राशि: ₹${prevPending} ➔ ₹${newPending}`);
+        }
+      }
+    }
+
+    const editHistoryLogs = [
+      ...(targetTx.editLogs || []),
+    ];
+
+    if (changedFields.length > 0) {
+      editHistoryLogs.push({
+        timestamp: new Date().toISOString(),
+        changedText: changedFields.join(", "),
+        operator: currentUser?.name || "मुख्य यूजर"
+      });
+    }
+
     const txPayload = {
       ...targetTx,
       farmerId: txForm.farmerId,
@@ -931,6 +996,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       rateType: txForm.isMandiSale && mandiPayload ? (txForm.rateType || "quintal") : null,
       pendingAmount: txForm.isCreditSale && creditPayload ? creditPayload.pendingAmount : null,
       dueDate: txForm.isCreditSale && creditPayload ? creditPayload.dueDate : null,
+      editLogs: editHistoryLogs,
     };
 
     if (currentUser?.id === "guest") {
@@ -1034,6 +1100,80 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       );
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `labor/${id}`);
+    }
+  };
+
+  // Labor Update
+  const updateLabor = async (id: string, laborForm: any) => {
+    const subContract = Number(laborForm.contractAmount);
+    const subAdvance = Number(laborForm.advancePaid);
+    const subBalance = subContract - subAdvance;
+
+    const laborPayload = {
+      farmerId: laborForm.farmerId,
+      farmId: laborForm.farmId || null,
+      date: laborForm.date,
+      crop: laborForm.crop,
+      mode: laborForm.mode,
+      contractAmount: subContract,
+      advancePaid: subAdvance,
+      dueBalance: subBalance,
+      individualDetails: laborForm.mode === "individual" ? {
+        laborerName: laborForm.laborerName || "मजदूर",
+        attendance: laborForm.attendance
+      } : null,
+      bulkDetails: laborForm.mode === "bulk_gang" ? {
+        workersCount: Number(laborForm.workersCount),
+        groupName: laborForm.groupName || "अनाम टोली",
+        workDescription: laborForm.workDescription || "विविध कृषि कार्य"
+      } : null,
+      ...(laborForm.mode === "individual" ? {
+        laborerName: laborForm.laborerName || "मजदूर",
+        attendance: laborForm.attendance
+      } : {
+        workersCount: Number(laborForm.workersCount),
+        groupName: laborForm.groupName || "अनाम टोली",
+        workDescription: laborForm.workDescription || "विविध कृषि कार्य"
+      })
+    };
+
+    if (currentUser?.id === "guest") {
+      setLabors((prev) => prev.map(l => {
+        if (l.id === id) {
+          return {
+            ...l,
+            ...laborPayload,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return l;
+      }));
+      const fName = farmers.find(f => f.id === laborForm.farmerId)?.name || "किसान";
+      const targetFarmName = farmers.find(f => f.id === laborForm.farmerId)?.farms?.find(fa => fa.id === laborForm.farmId)?.name || "मुख्य खेत";
+      await logAudit(
+        "UPDATE_LABOR", 
+        id, 
+        "labor", 
+        `लेबर संशोधित (खेत: ${targetFarmName}): किसान ${fName}, कुल राशि: ₹${subContract}, बकाया राशि: ₹${subBalance}`
+      );
+      return;
+    }
+
+    try {
+      await setDoc(doc(db, "labor", id), {
+        ...laborPayload,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      const fName = farmers.find(f => f.id === laborForm.farmerId)?.name || "किसान";
+      const targetFarmName = farmers.find(f => f.id === laborForm.farmerId)?.farms?.find(fa => fa.id === laborForm.farmId)?.name || "मुख्य खेत";
+      await logAudit(
+        "UPDATE_LABOR", 
+        id, 
+        "labor", 
+        `लेबर संशोधित (खेत: ${targetFarmName}): किसान ${fName}, कुल राशि: ₹${subContract}, बकाया राशि: ₹${subBalance}`
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `labor/${id}`);
     }
   };
 
@@ -1424,6 +1564,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         createTransaction,
         updateTransaction,
         createLabor,
+        updateLabor,
         handleAddPlotInline,
         handleDeletePlot,
         handleUpdatePlot,

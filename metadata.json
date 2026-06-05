@@ -1,6 +1,6 @@
 {
   "name": "कृषि प्रबंधन वेब ऐप (Agri-Ecosystem)",
   "description": "एंड्रॉयड ऐप की तरह दिखने वाला समर्पित छोटे फोल्डर बेस्ड (आय, व्यय, खाद, बीज, दवा, लेबर) कृषि प्रबंधन ऐप",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["camera", "microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
