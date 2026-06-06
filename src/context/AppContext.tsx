@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { auth, db, handleFirestoreError, OperationType } from "../firebase";
-import { Farmer, Transaction, LaborLog, AuditLog, MandiRate } from "../types";
+import { Farmer, Transaction, LaborLog, AuditLog, MandiRate, CropSale } from "../types";
 import { 
   collection, 
   doc, 
@@ -72,6 +72,7 @@ interface AppContextType {
   transactions: Transaction[];
   labors: LaborLog[];
   audits: AuditLog[];
+  cropSales: CropSale[];
   isSyncing: boolean;
   cloudCoreEnabled: boolean;
   setCloudCoreEnabled: (v: boolean) => void;
@@ -84,7 +85,7 @@ interface AppContextType {
   clearAllDatabaseData: () => Promise<void>;
 
   // Mutative Actions (CRUDS)
-  logAudit: (action: string, targetId: string, collectionName: "farmers" | "transactions" | "labor", details: string) => Promise<void>;
+  logAudit: (action: string, targetId: string, collectionName: "farmers" | "transactions" | "labor" | "crop_sales", details: string) => Promise<void>;
   createFarmer: (farmerForm: any, farmerFarms: any[]) => Promise<void>;
   updateFarmer: (id: string, name: string, village: string, phone: string) => Promise<void>;
   createTransaction: (txForm: any) => Promise<void>;
@@ -97,6 +98,10 @@ interface AppContextType {
   deleteFarmer: (id: string) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
   deleteLabor: (id: string) => Promise<void>;
+  createCropSale: (saleForm: any) => Promise<void>;
+  updateCropSale: (id: string, saleForm: any) => Promise<void>;
+  updateCropSaleStatus: (id: string, status: "sold" | "unsold") => Promise<void>;
+  deleteCropSale: (id: string) => Promise<void>;
 
   // Analytics, Exports, Reminders
   roiAnalytics: any[];
@@ -148,6 +153,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [labors, setLabors] = useState<LaborLog[]>([]);
   const [audits, setAudits] = useState<AuditLog[]>([]);
+  const [cropSales, setCropSales] = useState<CropSale[]>([]);
   const [allOperators, setAllOperators] = useState<any[]>([]);
 
   // Local state search
@@ -192,7 +198,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // 1. SAVE/RESTORE LOCALSTORAGE FOR PERSISTENCY DURING GUEST OR DEMO MODE
-  const saveGuestData = (type: "farmers" | "transactions" | "labors" | "audits", data: any[]) => {
+  const saveGuestData = (type: "farmers" | "transactions" | "labors" | "audits" | "crop_sales", data: any[]) => {
     if (currentUser?.id === "guest") {
       localStorage.setItem(`agri_guest_${type}`, JSON.stringify(data));
     }
@@ -204,11 +210,13 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const gTxs = localStorage.getItem("agri_guest_transactions");
       const gLabors = localStorage.getItem("agri_guest_labors");
       const gAudits = localStorage.getItem("agri_guest_audits");
+      const gCropSales = localStorage.getItem("agri_guest_crop_sales");
 
       setFarmers(gFarmers ? JSON.parse(gFarmers) : INITIAL_FARMERS);
       setTransactions(gTxs ? JSON.parse(gTxs) : INITIAL_TRANSACTIONS);
       setLabors(gLabors ? JSON.parse(gLabors) : INITIAL_LABOR);
       setAudits(gAudits ? JSON.parse(gAudits) : INITIAL_AUDITS);
+      setCropSales(gCropSales ? JSON.parse(gCropSales) : []);
       setLocalDataRestored(true);
     } else {
       setLocalDataRestored(false);
@@ -239,6 +247,12 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       saveGuestData("audits", audits);
     }
   }, [audits, currentUser, localDataRestored]);
+
+  useEffect(() => {
+    if (currentUser?.id === "guest" && localDataRestored) {
+      saveGuestData("crop_sales", cropSales);
+    }
+  }, [cropSales, currentUser, localDataRestored]);
 
   // Auth Subscription
   useEffect(() => {
@@ -422,6 +436,34 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       handleFirestoreError(error, OperationType.LIST, "audits");
     });
 
+    const unsubscribeCropSales = onSnapshot(collection(db, "crop_sales"), (snapshot) => {
+      const list: CropSale[] = [];
+      snapshot.forEach((doc) => {
+        const d = doc.data();
+        list.push({
+          id: d.id,
+          farmerId: d.farmerId,
+          farmerName: d.farmerName,
+          farmId: d.farmId,
+          farmName: d.farmName,
+          cropName: d.cropName,
+          quantityEstimated: Number(d.quantityEstimated || 0),
+          unit: d.unit || "kg",
+          estimatedPrice: Number(d.estimatedPrice || 0),
+          status: d.status || "unsold",
+          soldAt: d.soldAt || null,
+          createdAt: d.createdAt?.seconds ? new Date(d.createdAt.seconds * 1000).toISOString() : (d.createdAt || new Date().toISOString()),
+          updatedAt: d.updatedAt?.seconds ? new Date(d.updatedAt.seconds * 1000).toISOString() : (d.updatedAt || new Date().toISOString()),
+          createdByOperatorId: d.createdByOperatorId,
+          lastUpdatedByOperatorId: d.lastUpdatedByOperatorId
+        });
+      });
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setCropSales(list);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, "crop_sales");
+    });
+
     const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
       const list: any[] = [];
       snapshot.forEach((doc) => {
@@ -446,12 +488,13 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       unsubscribeTransactions();
       unsubscribeLabor();
       unsubscribeAudits();
+      unsubscribeCropSales();
       unsubscribeUsers();
     };
   }, [currentUser]);
 
   // Secure Auditing
-  const logAudit = async (action: string, targetId: string, collectionName: "farmers" | "transactions" | "labor", details: string) => {
+  const logAudit = async (action: string, targetId: string, collectionName: "farmers" | "transactions" | "labor" | "crop_sales", details: string) => {
     if (!currentUser) return;
     const auditId = "audit_" + Date.now();
     const newAudit: AuditLog = {
@@ -1317,6 +1360,158 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const createCropSale = async (saleForm: any) => {
+    const id = "crop_sale_" + Date.now();
+    const payload: CropSale = {
+      id,
+      farmerId: saleForm.farmerId,
+      farmerName: saleForm.farmerName || "",
+      farmId: saleForm.farmId || "",
+      farmName: saleForm.farmName || "",
+      cropName: saleForm.cropName || "",
+      quantityEstimated: Number(saleForm.quantityEstimated || 0),
+      unit: saleForm.unit || "kg",
+      estimatedPrice: Number(saleForm.estimatedPrice || 0),
+      status: "unsold",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      createdByOperatorId: currentUser?.id === "guest" ? "guest_visitor" : auth.currentUser!.uid,
+      lastUpdatedByOperatorId: currentUser?.id === "guest" ? "guest_visitor" : auth.currentUser!.uid
+    };
+
+    if (currentUser?.id === "guest") {
+      setCropSales((prev) => [payload, ...prev]);
+      await logAudit(
+        "CREATE_CROP_SALE",
+        id,
+        "crop_sales",
+        `विक्रय हेतु नयी फसल प्रविष्ट की: ${payload.cropName} (किसान: ${payload.farmerName}, मात्रा: ${payload.quantityEstimated} ${payload.unit === "kg" ? "किग्रा" : "टन"}, अनुमानित कीमत: ₹${payload.estimatedPrice})`
+      );
+      return;
+    }
+
+    try {
+      await setDoc(doc(db, "crop_sales", id), {
+        ...payload,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      await logAudit(
+        "CREATE_CROP_SALE",
+        id,
+        "crop_sales",
+        `विक्रय हेतु नयी फसल प्रविष्ट की: ${payload.cropName} (किसान: ${payload.farmerName}, मात्रा: ${payload.quantityEstimated} ${payload.unit === "kg" ? "किग्रा" : "टन"}, अनुमानित कीमत: ₹${payload.estimatedPrice})`
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, `crop_sales/${id}`);
+    }
+  };
+
+  const updateCropSale = async (id: string, saleForm: any) => {
+    if (currentUser?.id === "guest") {
+      setCropSales((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                cropName: saleForm.cropName,
+                quantityEstimated: Number(saleForm.quantityEstimated || 0),
+                unit: saleForm.unit || "kg",
+                estimatedPrice: Number(saleForm.estimatedPrice || 0),
+                updatedAt: new Date().toISOString()
+              }
+            : item
+        )
+      );
+      await logAudit(
+        "UPDATE_CROP_SALE",
+        id,
+        "crop_sales",
+        `विक्रय फसल प्रविष्टि में संशोधन किया: ${saleForm.cropName} (मात्रा: ${saleForm.quantityEstimated} ${saleForm.unit === "kg" ? "किग्रा" : "टन"}, अनुमानित कीमत: ₹${saleForm.estimatedPrice})`
+      );
+      return;
+    }
+
+    try {
+      await setDoc(doc(db, "crop_sales", id), {
+        cropName: saleForm.cropName,
+        quantityEstimated: Number(saleForm.quantityEstimated || 0),
+        unit: saleForm.unit || "kg",
+        estimatedPrice: Number(saleForm.estimatedPrice || 0),
+        updatedAt: serverTimestamp(),
+        lastUpdatedByOperatorId: auth.currentUser!.uid
+      }, { merge: true });
+      await logAudit(
+        "UPDATE_CROP_SALE",
+        id,
+        "crop_sales",
+        `विक्रय फसल प्रविष्टि में संशोधन किया: ${saleForm.cropName} (मात्रा: ${saleForm.quantityEstimated} ${saleForm.unit === "kg" ? "किग्रा" : "टन"}, अनुमानित कीमत: ₹${saleForm.estimatedPrice})`
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `crop_sales/${id}`);
+    }
+  };
+
+  const updateCropSaleStatus = async (id: string, status: "sold" | "unsold") => {
+    const isSold = status === "sold";
+    const soldAt = isSold ? new Date().toISOString() : null;
+
+    if (currentUser?.id === "guest") {
+      setCropSales((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                status,
+                soldAt: soldAt || undefined,
+                updatedAt: new Date().toISOString()
+              }
+            : item
+        )
+      );
+      const sale = cropSales.find((c) => c.id === id);
+      await logAudit(
+        "UPDATE_CROP_SALE_STATUS",
+        id,
+        "crop_sales",
+        `फसल विक्रय स्थिति अपडेट की: ${sale?.cropName || ""} -> ${isSold ? "बेचा गया (Sold)" : "बेचना शेष (Unsold)"}`
+      );
+      return;
+    }
+
+    try {
+      await setDoc(doc(db, "crop_sales", id), {
+        status,
+        soldAt,
+        updatedAt: serverTimestamp(),
+        lastUpdatedByOperatorId: auth.currentUser!.uid
+      }, { merge: true });
+      const sale = cropSales.find((c) => c.id === id);
+      await logAudit(
+        "UPDATE_CROP_SALE_STATUS",
+        id,
+        "crop_sales",
+        `फसल विक्रय स्थिति अपडेट की: ${sale?.cropName || ""} -> ${isSold ? "बेचा गया (Sold)" : "बेचना शेष (Unsold)"}`
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `crop_sales/${id}`);
+    }
+  };
+
+  const deleteCropSale = async (id: string) => {
+    if (currentUser?.id === "guest") {
+      setCropSales((prev) => prev.filter((item) => item.id !== id));
+      await logAudit("DELETE_CROP_SALE", id, "crop_sales", `हटाया गया फसल विक्रय पोस्ट ID: ${id}`);
+      return;
+    }
+    try {
+      await deleteDoc(doc(db, "crop_sales", id));
+      await logAudit("DELETE_CROP_SALE", id, "crop_sales", `हटाया गया फसल विक्रय पोस्ट ID: ${id}`);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `crop_sales/${id}`);
+    }
+  };
+
   // Dynamic voice recorder simulation using live registered farmers & fields
   const handleToggleVoiceRecord = (txFormSetter: any, modalOpenSetter: any) => {
     if (isRecording) {
@@ -1498,6 +1693,13 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           deletePromises.push(deleteDoc(doc(db, "labor", docSnap.id)));
         });
 
+        // Directly fetch and delete ALL crop sales documents physically from Firestore
+        const cropsCol = collection(db, "crop_sales");
+        const cropsSnap = await getDocs(cropsCol);
+        cropsSnap.forEach((docSnap) => {
+          deletePromises.push(deleteDoc(doc(db, "crop_sales", docSnap.id)));
+        });
+
         // Directly fetch and delete ALL audit logs physically from Firestore
         const auditsCol = collection(db, "audits");
         const auditsSnap = await getDocs(auditsCol);
@@ -1512,6 +1714,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setFarmers([]);
       setTransactions([]);
       setLabors([]);
+      setCropSales([]);
       setAudits([]);
 
       alert("✓ पूरा डेटा सफलतापूर्वक साफ कर दिया गया है! अब आपका डेटाबेस पूरी तरह खाली और नया है।");
@@ -1551,6 +1754,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         transactions,
         labors,
         audits,
+        cropSales,
         isSyncing,
         cloudCoreEnabled,
         setCloudCoreEnabled,
@@ -1571,6 +1775,10 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         deleteFarmer,
         deleteTransaction,
         deleteLabor,
+        createCropSale,
+        updateCropSale,
+        updateCropSaleStatus,
+        deleteCropSale,
         roiAnalytics,
         overallIncome,
         overallExpense,

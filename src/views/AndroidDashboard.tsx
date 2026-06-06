@@ -38,7 +38,8 @@ import {
   BookOpen,
   UserCheck,
   Boxes,
-  ClipboardList
+  ClipboardList,
+  Bell
 } from "lucide-react";
 
 // Pre-seeded Fertilizer brands & options
@@ -54,6 +55,7 @@ export const AndroidDashboard: React.FC = () => {
     transactions,
     labors,
     audits,
+    cropSales,
     allOperators,
     createOperatorByAdmin,
     updateOperatorProfile,
@@ -69,6 +71,10 @@ export const AndroidDashboard: React.FC = () => {
     deleteFarmer,
     deleteTransaction,
     deleteLabor,
+    createCropSale,
+    updateCropSale,
+    updateCropSaleStatus,
+    deleteCropSale,
     handleDeletePlot,
     handleUpdatePlot,
     triggerWhatsAppReminder,
@@ -685,6 +691,60 @@ export const AndroidDashboard: React.FC = () => {
   const [seedForm, setSeedForm] = useState({ farmerId: "", farmId: "", crop: "", seedVariety: "", quantityKg: "40", cost: "1800", date: new Date().toISOString().split("T")[0] });
   const [pesticideForm, setPesticideForm] = useState({ farmerId: "", farmId: "", crop: "", productName: "", quantity: "1", cost: "950", date: new Date().toISOString().split("T")[0] });
   const [laborFormState, setLaborFormState] = useState({ farmerId: "", farmId: "", crop: "", mode: "individual" as "individual" | "bulk_gang", laborerName: "", attendance: "present" as any, workersCount: "5", groupName: "", workDescription: "", contractAmount: "", advancePaid: "", date: new Date().toISOString().split("T")[0] });
+  const [cropSaleForm, setCropSaleForm] = useState({
+    farmerId: "",
+    farmerName: "",
+    farmId: "",
+    farmName: "",
+    cropName: "",
+    quantityEstimated: "",
+    unit: "kg" as "kg" | "ton",
+    estimatedPrice: ""
+  });
+  const [editingCropSaleId, setEditingCropSaleId] = useState<string | null>(null);
+
+  const [lastSeenAuditId, setLastSeenAuditId] = useState<string | null>(null);
+  const [activeToast, setActiveToast] = useState<{ id: string; title: string; body: string; operator: string } | null>(null);
+
+  useEffect(() => {
+    if (audits && audits.length > 0) {
+      const newest = audits[0];
+      if (!lastSeenAuditId) {
+        setLastSeenAuditId(newest.id);
+        return;
+      }
+      if (newest.id !== lastSeenAuditId) {
+        setLastSeenAuditId(newest.id);
+        
+        let notifTitle = "🔔 ऑपरेटर गतिविधि अपडेट";
+        if (newest.action.includes("CREATE_CROP_SALE")) {
+          notifTitle = "🌾 नयी फसल विक्रय हेतु जोड़ी गयी!";
+        } else if (newest.action.includes("UPDATE_CROP_SALE_STATUS")) {
+          notifTitle = "💰 फसल स्थिति अपडेट (Sold/Unsold)";
+        } else if (newest.action.includes("CREATE_TRANSACTION")) {
+          notifTitle = "📈 नया आर्थिक लेनदेन दर्ज!";
+        } else if (newest.action.includes("CREATE_LABOR")) {
+          notifTitle = "👥 नया लेबर हाजिरी पेमेंट लॉग!";
+        } else if (newest.action.includes("CREATE_FARMER")) {
+          notifTitle = "👨‍🌾 नया किसान पंजीकृत किया गया!";
+        } else if (newest.action.includes("STOCK") || newest.action.includes("FERTILIZER")) {
+          notifTitle = "📦 खाद/बीज स्टॉक में अपडेट!";
+        }
+
+        setActiveToast({
+          id: newest.id,
+          title: notifTitle,
+          body: newest.details,
+          operator: newest.operatorName || "सुपर एडमिन"
+        });
+
+        const hTimer = setTimeout(() => {
+          setActiveToast(null);
+        }, 8500);
+        return () => clearTimeout(hTimer);
+      }
+    }
+  }, [audits, lastSeenAuditId]);
 
   // Mandi manual calculator
   const [calcForm, setCalcForm] = useState({ gross: "50", rate: "2450", cutPercent: "1.5" });
@@ -1553,6 +1613,39 @@ export const AndroidDashboard: React.FC = () => {
       {/* Main Content Container Area */}
       <div className="flex-1 w-full max-w-xl mx-auto flex flex-col relative px-3 py-3 md:py-6">
         
+        {/* Real-time Push Notification Simulator Toast Banner */}
+        {activeToast && (
+          <div className="absolute top-5 left-5 right-5 z-50 bg-[#0f172a]/95 backdrop-blur-md border-2 border-amber-500/80 rounded-[22px] p-4 shadow-2xl animate-scaleIn flex items-start space-x-3 text-left">
+            <div className="p-2 sm:p-2.5 bg-gradient-to-tr from-amber-600 to-orange-500 rounded-xl flex items-center justify-center shrink-0 shadow">
+              <Bell className="h-4.5 w-4.5 text-white animate-pulse" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex justify-between items-center bg-transparent">
+                <span className="text-[9px] font-extrabold tracking-wider text-amber-505 text-amber-500 uppercase leading-none">
+                  {activeToast.title}
+                </span>
+                <span className="text-[7.5px] text-emerald-400 bg-emerald-900/45 border border-emerald-500/25 px-1.5 py-0.5 rounded-full font-mono uppercase font-black tracking-widest shrink-0 animate-pulse">
+                  FCM लाइव
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-100 font-bold font-sans mt-1.5 leading-relaxed">
+                {activeToast.body}
+              </p>
+              <div className="flex justify-between items-center mt-2.5 pt-2 border-t border-slate-800">
+                <span className="text-[8px] text-slate-400 font-mono uppercase">
+                  👤 ऑपरेटर: {activeToast.operator}
+                </span>
+                <button
+                  onClick={() => setActiveToast(null)}
+                  className="text-[9px] font-black text-rose-450 text-rose-500 hover:text-rose-400 cursor-pointer p-0 bg-transparent border-0 outline-none uppercase"
+                >
+                  बंद करें [X]
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 🏞️ Smartphone Android Launcher Wallpaper with full-grid desktop elements */}
         {!activeApp ? (
           currentUser ? (
@@ -2263,7 +2356,7 @@ export const AndroidDashboard: React.FC = () => {
                   setShowAddForm(false);
                   if (["fertilizer", "seed", "pesticide"].includes(activeApp || "")) {
                     setActiveApp("folder_stock_usage");
-                  } else if (["income", "expense", "labor", "stock_management", "folder_stock_usage"].includes(activeApp || "")) {
+                  } else if (["income", "expense", "labor", "stock_management", "folder_stock_usage", "folder_crop_sales"].includes(activeApp || "")) {
                     setActiveApp("folder_management");
                   } else if (["farm_management", "crop_management", "merchant_management"].includes(activeApp || "")) {
                     setActiveApp("folder_profile");
@@ -2285,7 +2378,8 @@ export const AndroidDashboard: React.FC = () => {
                   {activeApp === "folder_profile" && "📁 प्रोफ़ाइल प्रबंधन"}
                   {activeApp === "folder_my_profile" && "👤 मेरी प्रोफाइल"}
                   {activeApp === "folder_reports" && "📁 रिपोर्ट"}
-                  {activeApp === "folder_stock_usage" && "📦 स्टॉक उपयोग में"}
+                  {activeApp === "folder_stock_usage" && "📦 स्टॉक उपयोग करें"}
+                  {activeApp === "folder_crop_sales" && "🌾 फसल विक्रय जानकारी"}
                   {activeApp === "income" && "💰 फसल विक्रय"}
                   {activeApp === "expense" && "📈 व्यय प्रबंधन"}
                   {activeApp === "fertilizer" && "📦 खाद प्रबंधन"}
@@ -2311,7 +2405,7 @@ export const AndroidDashboard: React.FC = () => {
               </div>
 
               {/* Action Buttons inside App Headers */}
-              {["income", "expense", "fertilizer", "seed", "pesticide", "labor", "farmers", "farm_management", "crop_management", "merchant_management", "fertilizer_management", "pesticide_management"].includes(activeApp || "") ? (
+              {["income", "expense", "fertilizer", "seed", "pesticide", "labor", "farmers", "farm_management", "crop_management", "merchant_management", "fertilizer_management", "pesticide_management", "folder_crop_sales"].includes(activeApp || "") ? (
                 <button
                   onClick={() => setShowAddForm(!showAddForm)}
                   className="p-1 px-2.5 bg-emerald-700 hover:bg-emerald-600 border border-emerald-500 rounded-lg text-white font-extrabold text-[9px] flex items-center space-x-1 outline-none transition-all mr-1 pr-3 shadow-md"
@@ -2397,7 +2491,7 @@ export const AndroidDashboard: React.FC = () => {
                       </div>
                     </button>
 
-                    {/* Item 5: स्टॉक उपयोग में (Nested Folder) */}
+                    {/* Item 5: स्टॉक उपयोग करें (Nested Folder) */}
                     <button
                       onClick={() => setActiveApp("folder_stock_usage")}
                       className="p-4 bg-white border border-slate-100 hover:border-emerald-305 hover:bg-emerald-50/25 active:bg-emerald-55 rounded-[24px] shadow-sm hover:shadow transition-all text-left flex flex-col space-y-3 cursor-pointer outline-none col-span-2 relative overflow-hidden"
@@ -2408,11 +2502,34 @@ export const AndroidDashboard: React.FC = () => {
                       </div>
                       <div className="flex justify-between items-center w-full">
                         <div>
-                          <span className="text-xs font-black text-slate-900 block font-sans">📂 स्टॉक उपयोग में</span>
+                          <span className="text-xs font-black text-slate-900 block font-sans">📂 स्टॉक उपयोग करें</span>
                           <span className="text-[9.5px] text-slate-400 font-sans mt-0.5 block leading-tight">खाद, बीज एवं कीटनाशक दवा प्रबंधन</span>
                         </div>
                         <span className="bg-emerald-100 text-emerald-800 font-black text-[9px] px-2.5 py-1 rounded-full uppercase leading-none font-sans font-extrabold shrink-0">
                           3 मॉड्यूल्स
+                        </span>
+                      </div>
+                    </button>
+
+                    {/* Item 6: फसल विक्रय जानकारी (New Folder) */}
+                    <button
+                      onClick={() => {
+                        setShowAddForm(false);
+                        setActiveApp("folder_crop_sales");
+                      }}
+                      className="p-4 bg-white border border-slate-100 hover:border-amber-305 hover:bg-amber-50/25 active:bg-amber-55 rounded-[24px] shadow-sm hover:shadow transition-all text-left flex flex-col space-y-3 cursor-pointer outline-none col-span-2 relative overflow-hidden"
+                    >
+                      <div className="absolute right-4 top-4 text-lg opacity-25">🌾</div>
+                      <div className="p-2.5 w-10 h-10 bg-gradient-to-tr from-amber-600 to-orange-500 rounded-xl shadow border border-orange-400/20 flex items-center justify-center">
+                        <Folder className="h-5 w-5 text-white fill-amber-100" />
+                      </div>
+                      <div className="flex justify-between items-center w-full">
+                        <div>
+                          <span className="text-xs font-black text-slate-900 block font-sans">🌾 फसल विक्रय जानकारी</span>
+                          <span className="text-[9.5px] text-slate-400 font-sans mt-0.5 block leading-tight">फसल का अनुमानित भाव व अनसोल्ड/सोल्ड रिकॉर्ड</span>
+                        </div>
+                        <span className="bg-amber-105 text-amber-800 font-black text-[9px] px-2.5 py-1 rounded-full uppercase leading-none font-sans font-extrabold shrink-0">
+                          नया फोल्डर
                         </span>
                       </div>
                     </button>
@@ -2476,6 +2593,326 @@ export const AndroidDashboard: React.FC = () => {
                       </div>
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* === SUBFOLDER APP: फसल विक्रय जानकारी (folder_crop_sales) === */}
+              {activeApp === "folder_crop_sales" && (
+                <div className="space-y-4 animate-scaleIn text-slate-800">
+                  {showAddForm ? (
+                    /* Add / Edit Form */
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (!cropSaleForm.farmerId) {
+                          alert("कृपया किसान चुनें!");
+                          return;
+                        }
+                        if (!cropSaleForm.cropName) {
+                          alert("कृपया फसल का नाम प्रविष्ट करें!");
+                          return;
+                        }
+                        
+                        const selectedFarmer = farmers.find(f => f.id === cropSaleForm.farmerId);
+                        const selectedFarm = selectedFarmer?.farms?.find(p => p.id === cropSaleForm.farmId);
+                        
+                        const salePayload = {
+                          ...cropSaleForm,
+                          farmerName: selectedFarmer?.name || "",
+                          farmName: selectedFarm?.name || "मुख्य खेत",
+                          quantityEstimated: Number(cropSaleForm.quantityEstimated || 0),
+                          estimatedPrice: Number(cropSaleForm.estimatedPrice || 0)
+                        };
+
+                        if (editingCropSaleId) {
+                          await updateCropSale(editingCropSaleId, salePayload);
+                          alert("✓ फसल विक्रय जानकारी संसोधित की गयी!");
+                          setEditingCropSaleId(null);
+                        } else {
+                          await createCropSale(salePayload);
+                          alert("✓ फसल विक्रय जानकारी दर्ज की गई! और ऑपरेटर को रियल-टाइम सूचना भेज दी गई है।");
+                        }
+                        setCropSaleForm({
+                          farmerId: "",
+                          farmerName: "",
+                          farmId: "",
+                          farmName: "",
+                          cropName: "",
+                          quantityEstimated: "",
+                          unit: "kg",
+                          estimatedPrice: ""
+                        });
+                        setShowAddForm(false);
+                      }}
+                      className="space-y-4 bg-white p-4.5 rounded-[24px] border border-slate-100 shadow-lg text-slate-800"
+                    >
+                      <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-[10px] text-amber-800 font-extrabold block mb-1">
+                        🌾 {editingCropSaleId ? "फसल विक्रय जानकारी विवरण संपादित करें" : "विक्रय हेतु नयी फसल व उसकी अनुमानित मात्रा, भाव दर्ज करने का प्रपत्र।"}
+                      </div>
+
+                      {/* Select Farmer */}
+                      <div className="space-y-1">
+                        <label className="font-extrabold text-slate-700 block">👤 किसान चुनें (Select Farmer) *</label>
+                        <select
+                          value={cropSaleForm.farmerId}
+                          onChange={(e) => {
+                            const fId = e.target.value;
+                            const f = farmers.find(item => item.id === fId);
+                            setCropSaleForm(prev => ({
+                              ...prev,
+                              farmerId: fId,
+                              farmerName: f?.name || "",
+                              farmId: f?.farms && f.farms.length > 0 ? f.farms[0].id : "",
+                              farmName: f?.farms && f.farms.length > 0 ? f.farms[0].name : "मुख्य खेत",
+                              cropName: f?.activeCrop || ""
+                            }));
+                          }}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold outline-none text-slate-800"
+                          required
+                        >
+                          <option value="">-- किसान चुनें --</option>
+                          {farmers.map((f) => (
+                            <option key={f.id} value={f.id}>{f.name} ({f.village})</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Select Farm plot of select farmer */}
+                      {cropSaleForm.farmerId && (
+                        <div className="space-y-1 animate-fadeIn">
+                          <label className="font-extrabold text-slate-700 block">🗺️ खेत/प्लॉट चुनें (Select Plot)</label>
+                          <select
+                            value={cropSaleForm.farmId}
+                            onChange={(e) => {
+                              const fId = e.target.value;
+                              const farmer = farmers.find(item => item.id === cropSaleForm.farmerId);
+                              const farm = farmer?.farms?.find(p => p.id === fId);
+                              setCropSaleForm(prev => ({
+                                ...prev,
+                                farmId: fId,
+                                farmName: farm?.name || "मुख्य खेत",
+                                cropName: farm?.activeCrop || farmer?.activeCrop || ""
+                              }));
+                            }}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold outline-none text-slate-800"
+                          >
+                            <option value="">मुख्य खेत (Default)</option>
+                            {farmers.find(item => item.id === cropSaleForm.farmerId)?.farms?.map((plot) => (
+                              <option key={plot.id} value={plot.id}>{plot.name} ({plot.acreage} एकड़)</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Crop Name input */}
+                      <div className="space-y-1">
+                        <label className="font-extrabold text-slate-705 block">🌾 फसल का नाम (Crop Name) *</label>
+                        <input
+                          type="text"
+                          placeholder="उदा: धान, गेहूं, सरसों, चना आदि..."
+                          value={cropSaleForm.cropName}
+                          onChange={(e) => setCropSaleForm({ ...cropSaleForm, cropName: e.target.value })}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-sans font-bold text-slate-800 outline-none"
+                          required
+                        />
+                      </div>
+
+                      {/* Quantity & Unit input */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="font-extrabold text-slate-705 block">⚖️ अनुमानित मात्रा (Qty) *</label>
+                          <input
+                            type="number"
+                            min="0.1"
+                            step="any"
+                            placeholder="उदा: 50"
+                            value={cropSaleForm.quantityEstimated}
+                            onChange={(e) => setCropSaleForm({ ...cropSaleForm, quantityEstimated: e.target.value })}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-sans font-bold text-slate-800 outline-none"
+                            required
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="font-extrabold text-slate-705 block">📏 इकाई (Unit) *</label>
+                          <select
+                            value={cropSaleForm.unit}
+                            onChange={(e) => setCropSaleForm({ ...cropSaleForm, unit: e.target.value as "kg" | "ton" })}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-800 outline-none"
+                          >
+                            <option value="kg">किग्रा (kg)</option>
+                            <option value="ton">टन (ton)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Estimated Price */}
+                      <div className="space-y-1">
+                        <label className="font-extrabold text-slate-705 block">₹ अनुमानित कीमत (Est. Price) *</label>
+                        <div className="relative">
+                          <span className="absolute left-3.5 top-2.5 font-extrabold text-slate-400">₹</span>
+                          <input
+                            type="number"
+                            min="1"
+                            placeholder="उदा: 25000"
+                            value={cropSaleForm.estimatedPrice}
+                            onChange={(e) => setCropSaleForm({ ...cropSaleForm, estimatedPrice: e.target.value })}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 pl-8 font-sans font-bold text-slate-800 outline-none"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      {/* Submit form button */}
+                      <button
+                        type="submit"
+                        className="w-full py-3 bg-gradient-to-r from-amber-600 to-orange-550 hover:from-amber-500 hover:to-orange-500 text-white rounded-xl text-xs font-bold shadow-md active:scale-95 transition-all text-center border-0 cursor-pointer"
+                      >
+                        {editingCropSaleId ? "💾 संशोधन सहेजें" : "➕ फसल विक्रय एंट्री जोड़ें"}
+                      </button>
+                    </form>
+                  ) : (
+                    /* Display Crop sales lists */
+                    <div className="space-y-3.5 text-slate-800">
+                      <div className="p-3.5 bg-gradient-to-tr from-amber-550/10 to-orange-450/5 border border-amber-500/10 rounded-2xl flex justify-between items-center text-slate-700">
+                        <div className="text-left">
+                          <span className="text-[10px] uppercase font-black tracking-widest text-amber-650 block leading-tight">अनुमानित उपज सूची</span>
+                          <span className="font-black font-sans text-[11px] leading-tight text-slate-900 block mt-0.5 font-extrabold">विक्रय हेतु सक्रिय फसलें</span>
+                        </div>
+                        <span className="text-[10px] bg-amber-500/15 border border-amber-300/35 px-2.5 py-1 rounded-full text-amber-700 font-extrabold animate-pulse">
+                          🔔 लाइव रियल-टाइम सूचना
+                        </span>
+                      </div>
+
+                      {cropSales.length === 0 ? (
+                        <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 font-bold">
+                          📭 कोई फसल विक्रय जानकारी एंट्री उपलब्ध नहीं है। ऊपर दाएं कोने में "जोड़ें" पर क्लिक करके पहली एंट्री करें।
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {cropSales.map((item) => {
+                            // Check sold state and time restriction
+                            const isSold = item.status === "sold";
+                            let hoursLeftMessage = "";
+                            if (isSold && item.soldAt) {
+                              const elapsedMs = new Date().getTime() - new Date(item.soldAt).getTime();
+                              const minsLeft = Math.max(0, 60 - Math.floor(elapsedMs / 60000));
+                              hoursLeftMessage = `(${minsLeft} मिनट में सूची से स्वतः समाप्त हो जायेगा)`;
+                            }
+
+                            // Verify if it should be displayed (sold crop visible for max 1 hr)
+                            let isVisible = true;
+                            if (isSold && item.soldAt) {
+                              const elapsedMs = new Date().getTime() - new Date(item.soldAt).getTime();
+                              isVisible = elapsedMs < 3600000; // Less than 1 hour
+                            }
+
+                            if (!isVisible) return null;
+
+                            return (
+                              <div
+                                key={item.id}
+                                className={`p-4 bg-white border rounded-[22px] shadow-sm relative transition-all ${
+                                  isSold ? "border-slate-150 opacity-70 bg-slate-50" : "border-amber-100 bg-white"
+                                } hover:shadow-md`}
+                              >
+                                {isSold ? (
+                                  <div className="absolute top-3 right-3 bg-emerald-100 border border-emerald-300 text-emerald-800 text-[8.5px] font-sans font-black tracking-wider uppercase px-2 py-0.5 rounded-md leading-none">
+                                    ✓ SOLD {hoursLeftMessage}
+                                  </div>
+                                ) : (
+                                  <div className="absolute top-3 right-3 bg-amber-100 border border-amber-300 text-amber-800 text-[8.5px] font-sans font-black tracking-wider uppercase px-2 py-0.5 rounded-md leading-none">
+                                    ● UNSOLD
+                                  </div>
+                                )}
+
+                                <div className="space-y-2 mt-1 text-slate-800">
+                                  <div className="flex items-center space-x-2">
+                                    <span className="w-1.5 h-3 bg-amber-500 rounded-full shrink-0"></span>
+                                    <h4 className="text-xs font-black text-slate-900 font-sans tracking-tight">
+                                      {item.cropName} (अनुमानित उपज)
+                                    </h4>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-y-1.5 text-[10px] text-slate-500 font-sans">
+                                    <div>
+                                      👤 किसान: <span className="font-extrabold text-slate-800">{item.farmerName}</span>
+                                    </div>
+                                    <div>
+                                      🗺️ खेत: <span className="font-extrabold text-slate-800">{item.farmName}</span>
+                                    </div>
+                                    <div>
+                                      ⚖️ मात्रा: <span className="font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded text-[9.5px] font-sans">{item.quantityEstimated} {item.unit === "kg" ? "किग्रा" : "टन"}</span>
+                                    </div>
+                                    <div>
+                                      ₹ अनुमानित कीमत: <span className="font-extrabold text-green-700 font-sans text-xs">₹{item.estimatedPrice}</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Form Actions footer */}
+                                  <div className="flex justify-between items-center pt-2.5 border-t border-slate-100 mt-2.5">
+                                    <div className="flex items-center space-x-2">
+                                      <span className="text-[10px] font-bold text-slate-400">स्थिति:</span>
+                                      <select
+                                        value={item.status}
+                                        onChange={async (e) => {
+                                          await updateCropSaleStatus(item.id, e.target.value as "sold" | "unsold");
+                                        }}
+                                        className={`text-[9.5px] font-extrabold rounded-lg px-2 py-1 outline-none border cursor-pointer ${
+                                          isSold
+                                            ? "bg-green-100 text-green-800 border-green-300"
+                                            : "bg-amber-50 text-amber-800 border-amber-200"
+                                        }`}
+                                      >
+                                        <option value="unsold">अनसोल्ड (Unsold)</option>
+                                        <option value="sold">सोल्ड (Sold)</option>
+                                      </select>
+                                    </div>
+
+                                    <div className="flex items-center space-x-2">
+                                      {/* Edit button */}
+                                      <button
+                                        onClick={() => {
+                                          setEditingCropSaleId(item.id);
+                                          setCropSaleForm({
+                                            farmerId: item.farmerId,
+                                            farmerName: item.farmerName,
+                                            farmId: item.farmId || "",
+                                            farmName: item.farmName,
+                                            cropName: item.cropName,
+                                            quantityEstimated: String(item.quantityEstimated),
+                                            unit: item.unit,
+                                            estimatedPrice: String(item.estimatedPrice)
+                                          });
+                                          setShowAddForm(true);
+                                        }}
+                                        className="p-1 px-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 rounded-lg text-[10px] font-extrabold cursor-pointer transition-all"
+                                      >
+                                        ✏️ एडिट
+                                      </button>
+
+                                      {/* Delete button */}
+                                      <button
+                                        onClick={async () => {
+                                          if (confirm("क्या आप वाकई इस फसल विक्रय एंट्री को हटाना चाहते हैं?")) {
+                                            await deleteCropSale(item.id);
+                                            alert("✓ फसल विक्रय प्रविष्टि हटा दी गयी!");
+                                          }
+                                        }}
+                                        className="p-1 px-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 rounded-lg text-[10px] font-extrabold cursor-pointer transition-all"
+                                      >
+                                        🗑️ हटाएं
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

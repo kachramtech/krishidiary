@@ -123,9 +123,27 @@ export interface AuditLog {
   operatorName: string;
   action: string; // 'CREATE_FARMER' | 'UPDATE_TRANSACTION' | etc.
   targetId: string;
-  targetCollection: "farmers" | "transactions" | "labor";
+  targetCollection: "farmers" | "transactions" | "labor" | "crop_sales";
   timestamp: string;
   details: string; // text description
+}
+
+export interface CropSale {
+  id: string;
+  farmerId: string;
+  farmerName: string;
+  farmId?: string;
+  farmName: string;
+  cropName: string;
+  quantityEstimated: number;
+  unit: "kg" | "ton";
+  estimatedPrice: number;
+  status: "sold" | "unsold";
+  soldAt?: string; // timestamp when marked sold
+  createdAt: string;
+  updatedAt: string;
+  createdByOperatorId: string;
+  lastUpdatedByOperatorId: string;
 }
 
 export interface MandiRate {
