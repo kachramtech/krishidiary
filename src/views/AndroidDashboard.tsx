@@ -116,16 +116,18 @@ export const AndroidDashboard: React.FC = () => {
   const [reportFolderOpen, setReportFolderOpen] = useState(false); // 'रिपोर्ट' folder overlay click state
   const [reportYearFilter, setReportYearFilter] = useState<string>("सभी"); // 'सभी' | '2026-2027' | '2025-2026'
   const [searchQuery, setSearchQuery] = useState("");
+  const [vegSearchQuery, setVegSearchQuery] = useState("");
+  const [vegFilterUnsoldOnly, setVegFilterUnsoldOnly] = useState(true);
   const [landingTab, setLandingTab] = useState<"advisory" | "appinfo">("advisory");
   const [advisoryStep, setAdvisoryStep] = useState<"tillage" | "seed" | "manure" | "protection">("tillage");
   const [advisoryAcres, setAdvisoryAcres] = useState<number>(1);
 
-  // Guard routing: reset active app if user gets signed out
+  // Guard routing: reset active app if user gets signed out (except for public vegetables for sale view)
   useEffect(() => {
-    if (!currentUser) {
+    if (!currentUser && activeApp !== "vegetables_for_sale") {
       setActiveApp(null);
     }
-  }, [currentUser]);
+  }, [currentUser, activeApp]);
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -613,7 +615,15 @@ export const AndroidDashboard: React.FC = () => {
   useEffect(() => {
     const currentHistState = window.history.state;
     const stateKey = `${activeApp || "home"}_form_${showAddForm}`;
-    if (!currentHistState || currentHistState.stateKey !== stateKey) {
+    if (!currentHistState) {
+      // First page load: replace standard initial state without polluting the back history
+      window.history.replaceState(
+        { app: activeApp, showForm: showAddForm, stateKey },
+        "",
+        activeApp ? `#/${activeApp}${showAddForm ? "/add" : ""}` : "#/"
+      );
+    } else if (currentHistState.stateKey !== stateKey) {
+      // Normal forwarding transition: push the new state onto browser stack
       window.history.pushState(
         { app: activeApp, showForm: showAddForm, stateKey },
         "",
@@ -639,6 +649,27 @@ export const AndroidDashboard: React.FC = () => {
       window.removeEventListener("popstate", handlePopState);
     };
   }, []);
+
+  const handleAppBack = () => {
+    const currentHistState = window.history.state;
+    if (currentHistState && currentHistState.stateKey && currentHistState.stateKey !== "home_form_false") {
+      window.history.back();
+    } else {
+      // Fallback: programmatically step backward if no history stack is available
+      setShowAddForm(false);
+      if (["fertilizer", "seed", "pesticide"].includes(activeApp || "")) {
+        setActiveApp("folder_stock_usage");
+      } else if (["income", "expense", "labor", "stock_management", "folder_stock_usage", "folder_crop_sales"].includes(activeApp || "")) {
+        setActiveApp("folder_management");
+      } else if (["farm_management", "crop_management", "merchant_management"].includes(activeApp || "")) {
+        setActiveApp("folder_profile");
+      } else if (["consolidated_report", "farm_plot_report", "income_report", "expense_report"].includes(activeApp || "")) {
+        setActiveApp("folder_reports");
+      } else {
+        setActiveApp(null);
+      }
+    }
+  };
 
   const allPlots = farmers.reduce((acc: any[], f) => {
     if (f.farms && f.farms.length > 0) {
@@ -1659,20 +1690,20 @@ export const AndroidDashboard: React.FC = () => {
               </div>
 
               {/* Grid of Launcher Apps & Folders */}
-            <div className="grid grid-cols-4 gap-2.5 text-center my-12 max-w-[340px] mx-auto select-none">
+            <div className="grid grid-cols-5 gap-1.5 text-center my-12 max-w-[340px] mx-auto select-none">
               
               {/* 📂 FOLDER 1: प्रबंधन (The main folder requested by user) */}
               <button
                 onClick={() => setActiveApp("folder_management")}
                 className="flex flex-col items-center group outline-none focus:scale-95 transition-all text-center shrink-0 cursor-pointer"
               >
-                <div className="p-3 bg-gradient-to-tr from-indigo-805 from-blue-700 to-indigo-600 rounded-2.5xl shadow-lg border border-indigo-500/25 relative flex items-center justify-center hover:scale-105 transition-all w-12.5 h-12.5">
-                  <Folder className="h-5.5 w-5.5 text-yellow-300 fill-yellow-250" />
+                <div className="p-3 bg-gradient-to-tr from-indigo-805 from-blue-700 to-indigo-600 rounded-2.5xl shadow-lg border border-indigo-500/25 relative flex items-center justify-center hover:scale-105 transition-all w-12 h-12">
+                  <Folder className="h-5 w-5 text-yellow-300 fill-yellow-250" />
                   <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-[9px] text-white font-black rounded-full flex items-center justify-center animate-bounce">
                     5
                   </span>
                 </div>
-                <span className="text-[10px] font-bold text-white mt-2 drop-shadow leading-tight font-sans">
+                <span className="text-[9.5px] font-bold text-white mt-1.5 drop-shadow leading-tight font-sans">
                   प्रबंधन
                 </span>
               </button>
@@ -1682,14 +1713,14 @@ export const AndroidDashboard: React.FC = () => {
                 onClick={() => setActiveApp("folder_profile")}
                 className="flex flex-col items-center group outline-none focus:scale-95 transition-all text-center shrink-0 cursor-pointer"
               >
-                <div className="p-3 bg-gradient-to-tr from-emerald-800 to-teal-700 rounded-2.5xl shadow-lg border border-emerald-500/25 relative flex items-center justify-center hover:scale-105 transition-all w-12.5 h-12.5">
-                  <Folder className="h-5.5 w-5.5 text-emerald-300 fill-emerald-250" />
+                <div className="p-3 bg-gradient-to-tr from-emerald-800 to-teal-700 rounded-2.5xl shadow-lg border border-emerald-500/25 relative flex items-center justify-center hover:scale-105 transition-all w-12 h-12">
+                  <Folder className="h-5 w-5 text-emerald-300 fill-emerald-250" />
                   <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-[9px] text-white font-black rounded-full flex items-center justify-center animate-bounce font-mono">
                     3
                   </span>
                 </div>
-                <span className="text-[10px] font-bold text-white mt-2 drop-shadow leading-tight font-sans">
-                  प्रोफ़ाइल प्रबंधन
+                <span className="text-[9.5px] font-bold text-white mt-1.5 drop-shadow leading-tight font-sans">
+                  प्रोफ़ाइल
                 </span>
               </button>
 
@@ -1698,10 +1729,10 @@ export const AndroidDashboard: React.FC = () => {
                 onClick={() => setActiveApp("folder_my_profile")}
                 className="flex flex-col items-center group outline-none focus:scale-95 transition-all text-center shrink-0 cursor-pointer"
               >
-                <div className="p-3 bg-gradient-to-tr from-sky-805 from-sky-750 to-blue-600 rounded-2.5xl shadow-lg border border-blue-500/25 relative flex items-center justify-center hover:scale-105 transition-all w-12.5 h-12.5">
-                  <UserCheck className="h-5.5 w-5.5 text-sky-200" />
+                <div className="p-3 bg-gradient-to-tr from-sky-805 from-sky-750 to-blue-600 rounded-2.5xl shadow-lg border border-blue-500/25 relative flex items-center justify-center hover:scale-105 transition-all w-12 h-12">
+                  <UserCheck className="h-5 w-5 text-sky-200" />
                 </div>
-                <span className="text-[10px] font-bold text-white mt-2 drop-shadow leading-tight font-sans">
+                <span className="text-[9.5px] font-bold text-white mt-1.5 drop-shadow leading-tight font-sans">
                   मेरी प्रोफाइल
                 </span>
               </button>
@@ -1711,14 +1742,32 @@ export const AndroidDashboard: React.FC = () => {
                 onClick={() => setActiveApp("folder_reports")}
                 className="flex flex-col items-center group outline-none focus:scale-95 transition-all text-center shrink-0 cursor-pointer"
               >
-                <div className="p-3 bg-gradient-to-tr from-purple-850 from-purple-800 to-fuchsia-700 rounded-2.5xl shadow-lg border border-purple-500/25 relative flex items-center justify-center hover:scale-105 transition-all w-12.5 h-12.5">
-                  <Folder className="h-5.5 w-5.5 text-purple-300 fill-purple-250" />
+                <div className="p-3 bg-gradient-to-tr from-purple-850 from-purple-800 to-fuchsia-700 rounded-2.5xl shadow-lg border border-purple-500/25 relative flex items-center justify-center hover:scale-105 transition-all w-12 h-12">
+                  <Folder className="h-5 w-5 text-purple-300 fill-purple-250" />
                   <span className="absolute -top-1 -right-1 w-4 h-4 bg-fuchsia-500 text-[9px] text-white font-black rounded-full flex items-center justify-center animate-bounce font-mono">
                     4
                   </span>
                 </div>
-                <span className="text-[10px] font-bold text-white mt-2 drop-shadow leading-tight font-sans">
+                <span className="text-[9.5px] font-bold text-white mt-1.5 drop-shadow leading-tight font-sans">
                   रिपोर्ट
+                </span>
+              </button>
+
+              {/* 🥦 APP 5: विक्रीय सब्जी (Crops/Vegetables for Sale) */}
+              <button
+                onClick={() => setActiveApp("vegetables_for_sale")}
+                className="flex flex-col items-center group outline-none focus:scale-95 transition-all text-center shrink-0 cursor-pointer"
+              >
+                <div className="p-3 bg-gradient-to-tr from-amber-600 to-emerald-500 rounded-2.5xl shadow-lg border border-emerald-500/25 relative flex items-center justify-center hover:scale-105 transition-all w-12 h-12">
+                  <span className="text-base">🥦</span>
+                  {cropSales.length > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-[8px] text-white font-mono font-black rounded-full flex items-center justify-center animate-bounce font-sans">
+                      {cropSales.filter(item => item.status === "unsold").length}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[9.5px] font-bold text-white mt-1.5 drop-shadow leading-tight font-sans">
+                  विक्रीय सब्जी
                 </span>
               </button>
 
@@ -1923,6 +1972,35 @@ export const AndroidDashboard: React.FC = () => {
                 <p className="text-[10px] text-slate-400 max-w-xs mx-auto leading-normal font-sans">
                   बही-खाता प्रबंधन, खेतवार व्यय विश्लेषण एवं फसल सुरक्षा मार्गदर्शिका।
                 </p>
+              </div>
+
+              {/* 🥦 PUBLIC VEGETABLES FOR SALE ACCESSIBILITY GATEWAY */}
+              <div className="p-4 bg-gradient-to-tr from-emerald-950/40 via-slate-900 to-[#0b1220] border-2 border-emerald-500/30 rounded-[24px] space-y-2.5 shadow-lg relative overflow-hidden select-none">
+                <div className="absolute -right-8 -bottom-8 text-6xl opacity-10">🥦</div>
+                <div className="flex justify-between items-center bg-transparent">
+                  <div className="flex items-center space-x-2">
+                    <span className="p-2 bg-gradient-to-tr from-emerald-600 to-teal-500 rounded-xl flex items-center justify-center shadow">
+                      <span className="text-sm">🥬</span>
+                    </span>
+                    <div>
+                      <span className="text-[9px] font-black uppercase tracking-widest text-emerald-450 block leading-tight">सार्वजनिक पोर्टल (Open Access)</span>
+                      <h4 className="text-xs font-sans font-black text-white leading-none mt-1">🥦 विक्रीय सब्जी एवं ताज़ा उपज</h4>
+                    </div>
+                  </div>
+                  <span className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse font-sans">
+                    {cropSales.filter(item => item.status === "unsold").length} उपलब्ध
+                  </span>
+                </div>
+                <p className="text-[9.5px] text-slate-350 leading-normal font-sans font-medium">
+                  सभी प्रगतिशील किसानों द्वारा बिक्री हेतु दर्ज की गई ताज़ा फसलें, सब्जियां और उनके संपर्क विवरण बिना पंजीकरण के सीधे देखें।
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setActiveApp("vegetables_for_sale")}
+                  className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-[10px] font-sans font-extrabold cursor-pointer text-center shadow-md hover:shadow-emerald-900/10 transition-all active:scale-95 border-0"
+                >
+                  🥦 विक्रीय सब्जी बही देखें (Browse Crops) →
+                </button>
               </div>
 
               {/* 🌟 PERSISTENT NAVIGATION TOGGLE: Advisory Guide vs. App Info */}
@@ -2352,20 +2430,7 @@ export const AndroidDashboard: React.FC = () => {
             {/* Standard Android Application Header */}
             <div className="px-4 py-3 bg-[#0b1329] text-white flex justify-between items-center z-40 shadow">
               <button
-                onClick={() => {
-                  setShowAddForm(false);
-                  if (["fertilizer", "seed", "pesticide"].includes(activeApp || "")) {
-                    setActiveApp("folder_stock_usage");
-                  } else if (["income", "expense", "labor", "stock_management", "folder_stock_usage", "folder_crop_sales"].includes(activeApp || "")) {
-                    setActiveApp("folder_management");
-                  } else if (["farm_management", "crop_management", "merchant_management"].includes(activeApp || "")) {
-                    setActiveApp("folder_profile");
-                  } else if (["consolidated_report", "farm_plot_report", "income_report", "expense_report"].includes(activeApp || "")) {
-                    setActiveApp("folder_reports");
-                  } else {
-                    setActiveApp(null);
-                  }
-                }}
+                onClick={handleAppBack}
                 className="flex items-center space-x-1 hover:text-emerald-400 transition-all font-bold text-xs"
               >
                 <ChevronLeft className="h-4.5 w-4.5" />
@@ -2396,6 +2461,7 @@ export const AndroidDashboard: React.FC = () => {
                   {activeApp === "fertilizer_management" && "📦 खाद ब्रांड पंजीकरण"}
                   {activeApp === "pesticide_management" && "💊 दवा ब्रांड पंजीकरण"}
                   {activeApp === "merchant_management" && "🤝 व्यापारी प्रबंधन"}
+                  {activeApp === "vegetables_for_sale" && "🥦 विक्रीय सब्जी बही"}
                   {activeApp === "consolidated_report" && "📊 समेकित रिपोर्ट"}
                   {activeApp === "farm_plot_report" && "🗺️ खेतवार रिपोर्ट"}
                   {activeApp === "income_report" && "📈 आय विश्लेषण रिपोर्ट"}
@@ -2530,6 +2596,29 @@ export const AndroidDashboard: React.FC = () => {
                         </div>
                         <span className="bg-amber-105 text-amber-800 font-black text-[9px] px-2.5 py-1 rounded-full uppercase leading-none font-sans font-extrabold shrink-0">
                           नया फोल्डर
+                        </span>
+                      </div>
+                    </button>
+
+                    {/* Item 7: विक्रीय सब्जी */}
+                    <button
+                      onClick={() => {
+                        setShowAddForm(false);
+                        setActiveApp("vegetables_for_sale");
+                      }}
+                      className="p-4 bg-white border border-slate-100 hover:border-emerald-300 hover:bg-emerald-50/25 active:bg-emerald-50 rounded-[24px] shadow-sm hover:shadow transition-all text-left flex flex-col space-y-3 cursor-pointer outline-none col-span-2 relative overflow-hidden"
+                    >
+                      <div className="absolute right-4 top-4 text-lg opacity-15 text-slate-400">🥬</div>
+                      <div className="p-2.5 w-10 h-10 bg-gradient-to-tr from-emerald-600 to-teal-500 rounded-xl shadow border border-emerald-450 flex items-center justify-center">
+                        <span className="text-lg">🥦</span>
+                      </div>
+                      <div className="flex justify-between items-center w-full">
+                        <div>
+                          <span className="text-xs font-black text-slate-900 block font-sans font-extrabold">🥦 विक्रीय सब्जी</span>
+                          <span className="text-[9.5px] text-slate-400 font-sans mt-0.5 block leading-tight text-slate-500">कृषकों द्वारा विक्रय हेतु दर्ज सब्जियों की प्रविष्टि बही</span>
+                        </div>
+                        <span className="bg-emerald-100 text-emerald-850 font-black text-[9px] px-2.5 py-1 rounded-full uppercase leading-none font-sans font-extrabold shrink-0">
+                          {cropSales.filter(item => item.status === "unsold").length} उपलब्ध
                         </span>
                       </div>
                     </button>
@@ -2746,22 +2835,36 @@ export const AndroidDashboard: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Estimated Price */}
+                      {/* Estimated Price (interpreted as Rate per Unit) */}
                       <div className="space-y-1">
-                        <label className="font-extrabold text-slate-705 block">₹ अनुमानित कीमत (Est. Price) *</label>
+                        <label className="font-extrabold text-slate-705 block">₹ अनुमानित दर / भाव (Est. Rate per unit) *</label>
                         <div className="relative">
                           <span className="absolute left-3.5 top-2.5 font-extrabold text-slate-400">₹</span>
                           <input
                             type="number"
-                            min="1"
-                            placeholder="उदा: 25000"
+                            min="0.1"
+                            step="any"
+                            placeholder={cropSaleForm.unit === "kg" ? "उदा: 10 (₹10 प्रति किग्रा)" : "उदा: 22000 (₹22000 प्रति टन)"}
                             value={cropSaleForm.estimatedPrice}
                             onChange={(e) => setCropSaleForm({ ...cropSaleForm, estimatedPrice: e.target.value })}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 pl-8 font-sans font-bold text-slate-800 outline-none"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 pl-8 pr-16 font-sans font-bold text-slate-800 outline-none"
                             required
                           />
+                          <span className="absolute right-3.5 top-2.5 font-extrabold text-slate-500 text-[10px]">
+                            प्रति {cropSaleForm.unit === "kg" ? "किग्रा" : "टन"}
+                          </span>
                         </div>
                       </div>
+
+                      {/* Live Total value calculation */}
+                      {cropSaleForm.quantityEstimated && cropSaleForm.estimatedPrice && (
+                        <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-[11px] font-sans font-extrabold text-emerald-800 flex justify-between">
+                          <span>📊 कुल अनुमानित मूल्य (Total Live Value):</span>
+                          <span>
+                            ₹{(Number(cropSaleForm.quantityEstimated) * Number(cropSaleForm.estimatedPrice)).toLocaleString("en-IN")}
+                          </span>
+                        </div>
+                      )}
 
                       {/* Submit form button */}
                       <button
@@ -2845,8 +2948,16 @@ export const AndroidDashboard: React.FC = () => {
                                       ⚖️ मात्रा: <span className="font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded text-[9.5px] font-sans">{item.quantityEstimated} {item.unit === "kg" ? "किग्रा" : "टन"}</span>
                                     </div>
                                     <div>
-                                      ₹ अनुमानित कीमत: <span className="font-extrabold text-green-700 font-sans text-xs">₹{item.estimatedPrice}</span>
+                                      💸 अनुमानित दर: <span className="font-extrabold text-teal-700 font-sans text-xs">₹{item.estimatedPrice}/{item.unit === "kg" ? "किग्रा" : "टन"}</span>
                                     </div>
+                                  </div>
+
+                                  {/* Total Calculated Value Banner */}
+                                  <div className="bg-emerald-50 text-emerald-850 p-2.5 rounded-xl border border-emerald-100 flex justify-between items-center text-[10.5px]">
+                                    <span className="font-black">📊 कुल अनुमानित मूल्य:</span>
+                                    <span className="font-black text-green-700 font-sans text-xs">
+                                      ₹{(item.quantityEstimated * item.estimatedPrice).toLocaleString("en-IN")}
+                                    </span>
                                   </div>
 
                                   {/* Form Actions footer */}
@@ -5001,6 +5112,181 @@ export const AndroidDashboard: React.FC = () => {
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* === APP: विक्रीय सब्जियां एवं फसलें (Vegetables & Crops for Sale) === */}
+              {activeApp === "vegetables_for_sale" && (
+                <div className="space-y-4 animate-fadeIn font-sans leading-normal text-slate-800">
+                  <div className="p-4 bg-gradient-to-tr from-emerald-600 to-teal-500 rounded-[24px] text-white space-y-1.5 shadow-md relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-xl animate-pulse"></div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-100 block">🥬 उत्पाद एवं सब्जियां विवरण</span>
+                    <h3 className="text-sm font-black flex items-center space-x-2">
+                      <span>🥦 कृषको द्वारा विक्रय हेतु दर्ज फसलें</span>
+                    </h3>
+                    <p className="text-[9.5px] text-emerald-50 leading-relaxed">
+                      यह हमारे सभी पंजीकृत कृषकों द्वारा दर्ज की गई ताज़ा विक्रीय फ़सलों तथा सब्जियों की वास्तविक सूची है। आप यहाँ से कृषक का नाम, मात्रा, दर तथा सीधे संपर्क साधन पाकर फसल खरीद सकते हैं।
+                    </p>
+                  </div>
+
+                  {/* Search and Filters for buyer */}
+                  <div className="bg-slate-50 border border-slate-200 p-3 rounded-2xl space-y-3 shadow-inner">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="सब्जी/फसल का नाम या कृषक नाम खोजें..."
+                        value={vegSearchQuery}
+                        onChange={(e) => setVegSearchQuery(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl p-2 pl-9 pr-4 text-xs font-bold text-slate-800 outline-none"
+                      />
+                    </div>
+                    
+                    <div className="flex justify-between items-center text-[10px]">
+                      <span className="font-extrabold text-slate-500">
+                        🔍 कुल विक्रीय फसलें: {
+                          cropSales.filter(item => {
+                            const q = (vegSearchQuery || "").toLowerCase();
+                            const matchQuery = !q || item.cropName.toLowerCase().includes(q) || item.farmerName.toLowerCase().includes(q);
+                            return matchQuery;
+                          }).length
+                        }
+                      </span>
+                      <button 
+                        type="button"
+                        onClick={() => setVegFilterUnsoldOnly(!vegFilterUnsoldOnly)}
+                        className={`px-2.5 py-1 rounded-lg font-black transition-all ${
+                          vegFilterUnsoldOnly 
+                            ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                            : "bg-slate-200 text-slate-600 border border-slate-300"
+                        }`}
+                      >
+                        {vegFilterUnsoldOnly ? "🟢 केवल अनसोल्ड (Unsold)" : "⚪ सभी रिकॉर्ड दिखाएं"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* List of Sales */}
+                  <div className="space-y-3.5 pt-1">
+                    {(() => {
+                      const filteredVegSales = cropSales.filter(item => {
+                        const q = (vegSearchQuery || "").toLowerCase();
+                        // Find matching farmer to match village details if needed
+                        const fObj = farmers.find(f => f.id === item.farmerId || f.name === item.farmerName);
+                        const villageMatch = fObj && fObj.village ? fObj.village.toLowerCase().includes(q) : false;
+                        
+                        const textMatch = !q || item.cropName.toLowerCase().includes(q) || item.farmerName.toLowerCase().includes(q) || villageMatch;
+                        
+                        if (vegFilterUnsoldOnly && item.status === "sold") {
+                          return false; // Skip sold items if filter is active
+                        }
+                        
+                        return textMatch;
+                      });
+
+                      if (filteredVegSales.length === 0) {
+                        return (
+                          <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 font-bold">
+                            📭 कोई विक्रीय फसल इस फ़िल्टर के साथ उपलब्ध नहीं है।
+                          </div>
+                        );
+                      }
+
+                      return filteredVegSales.map((item) => {
+                        const fObj = farmers.find(f => f.id === item.farmerId || f.name === item.farmerName);
+                        const isSold = item.status === "sold";
+                        const finalTotal = Number(item.quantityEstimated) * Number(item.estimatedPrice);
+
+                        return (
+                          <div 
+                            key={item.id}
+                            className={`p-4 bg-white border rounded-2.5xl shadow-sm relative transition-all ${
+                              isSold ? "border-slate-150 opacity-70 bg-slate-0 font-sans" : "border-emerald-100 bg-white font-sans"
+                            } hover:shadow-md`}
+                          >
+                            {isSold ? (
+                              <span className="absolute top-3.5 right-4 bg-slate-200 border border-slate-300 text-slate-600 text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md">
+                                ✓ बिका हुआ (SOLD)
+                              </span>
+                            ) : (
+                              <span className="absolute top-3.5 right-4 bg-emerald-100 border border-emerald-300 text-emerald-800 text-[8.5px] font-sans font-black uppercase tracking-wider px-2 py-0.5 rounded-md animate-pulse">
+                                ● सक्रिय बिक्री (UNSOLD)
+                              </span>
+                            )}
+
+                            <div className="space-y-2.5">
+                              {/* Crop & Category Info */}
+                              <div className="flex items-center space-x-2 border-b border-dashed border-slate-100 pb-2">
+                                <span className="p-1 px-2 bg-emerald-50 text-emerald-800 rounded-lg text-xs font-black">
+                                  🥬 सब्जी/फसल
+                                </span>
+                                <strong className="text-xs text-slate-800 font-sans tracking-tight">
+                                  {item.cropName}
+                                </strong>
+                              </div>
+
+                              {/* Details Grid */}
+                              <div className="grid grid-cols-2 gap-y-2 text-[10.5px] text-slate-500 font-sans">
+                                <div>
+                                  👤 कृषक: <span className="font-extrabold text-slate-800">{item.farmerName}</span>
+                                </div>
+                                <div>
+                                  📍 ग्राम: <span className="font-extrabold text-slate-800">{fObj?.village || "पंजीकृत क्षेत्र"}</span>
+                                </div>
+                                <div>
+                                  ⚖️ मात्रा: <span className="font-black text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded text-[10px]">{item.quantityEstimated} {item.unit === "kg" ? "किग्रा" : "टन"}</span>
+                                </div>
+                                <div>
+                                  💸 दर / भाव: <span className="font-extrabold text-teal-700 text-xs">₹{item.estimatedPrice}/{item.unit === "kg" ? "किग्रा" : "टन"}</span>
+                                </div>
+                              </div>
+
+                              {/* Calculated Value Display Card */}
+                              <div className="p-2.5 bg-emerald-50/70 text-emerald-900 rounded-xl border border-emerald-100/50 flex justify-between items-center text-[10.5px]">
+                                <span className="font-black">📊 कुल अनुमानित मूल्य:</span>
+                                <span className="font-black text-green-700 font-sans text-xs">
+                                  ₹{finalTotal.toLocaleString("en-IN")}
+                                </span>
+                              </div>
+
+                              {/* Contact Infographics & Call/Message buttons */}
+                              <div className="space-y-1.5 border-t border-slate-100 pt-3">
+                                <div className="flex justify-between items-center text-[10.5px]">
+                                  <span className="text-slate-500">📞 संपर्क नम्बर:</span>
+                                  <span className="font-mono font-black text-slate-800 select-all tracking-wider text-xs bg-slate-100 p-0.5 px-2 rounded-lg border border-slate-150">
+                                    {fObj?.phone || "संपर्क क्रमांक अनुपलब्ध"}
+                                  </span>
+                                </div>
+
+                                {fObj?.phone && (
+                                  <div className="grid grid-cols-2 gap-2 mt-1">
+                                    <a
+                                      href={`tel:${fObj.phone}`}
+                                      className="py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-sans font-black text-[10px] text-center border border-indigo-100 flex items-center justify-center space-x-1 outline-none transition-all cursor-pointer"
+                                    >
+                                      <span>📞</span>
+                                      <span>सीधे कॉल करें</span>
+                                    </a>
+                                    <a
+                                      href={`https://wa.me/91${fObj.phone}?text=${encodeURIComponent(
+                                        `नमस्ते ${item.farmerName} जी, मैंने कृषिडायरी एग्रोपोर्टल पर आपकी विक्रय हेतु दर्ज फसल [${item.cropName}] मात्रा ${item.quantityEstimated} ${item.unit === "kg" ? "किग्रा" : "टन"} (दर ₹${item.estimatedPrice}) देखी है। मैं इसे खरीदने में रुचि रखता हूँ, कृपया संपर्क करें।`
+                                      )}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl font-sans font-black text-[10px] text-center border border-emerald-250 flex items-center justify-center space-x-1 outline-none transition-all cursor-pointer"
+                                    >
+                                      <span>💬</span>
+                                      <span>व्हाट्सएप संदेश</span>
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
                 </div>
               )}
@@ -7351,7 +7637,7 @@ Last Updated: June 2026
 
             {/* Standard Android Navigation Bottom Buttons */}
             <div className="px-6 py-3.5 bg-indigo-950/95 border-t border-slate-900 flex justify-around items-center text-slate-400 text-center text-xs">
-              <button onClick={() => { setActiveApp(null); setShowAddForm(false); }} className="hover:text-white transition-all font-sans font-black font-semibold">
+              <button onClick={handleAppBack} className="hover:text-white transition-all font-sans font-black font-semibold">
                 ◀ पीछे जाएं (Back)
               </button>
               <button onClick={() => { setActiveApp(null); setShowAddForm(false); }} className="w-4.5 h-4.5 bg-slate-800 rounded-full border-2 border-slate-700 hover:bg-slate-700">
